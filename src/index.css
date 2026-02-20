@@ -1,0 +1,38 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-background text-text-main font-sans antialiased transition-colors duration-300;
+  }
+
+  .dark body {
+    @apply bg-dark-bg text-slate-100;
+  }
+}
+
+@layer components {
+  .glass-panel {
+    @apply bg-white/70 backdrop-blur-md border border-white/20 shadow-xl dark:bg-dark-surface/70 dark:border-dark-border/50;
+  }
+
+  .glass-sidebar {
+    @apply bg-white/80 backdrop-blur-lg border-r border-slate-200/50 dark:bg-dark-surface/90 dark:border-dark-border;
+  }
+
+  .btn-primary {
+    @apply bg-primary text-white px-4 py-2 rounded-lg font-medium transition-all duration-200 hover:bg-primary-hover hover:shadow-lg active:scale-95 hover:shadow-glow;
+  }
+
+  .input-field {
+    @apply w-full px-4 py-2 rounded-lg border border-slate-200 bg-white/50 focus:bg-white focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all outline-none dark:bg-slate-900/50 dark:border-dark-border dark:text-slate-100 dark:focus:bg-dark-surface;
+  }
+
+  /* Card styles */
+  .card-base {
+    @apply bg-white rounded-xl border border-slate-100 shadow-soft hover:shadow-soft-hover transition-all duration-300 dark:bg-dark-surface dark:border-dark-border dark:shadow-none dark:hover:bg-slate-800;
+  }
+}
