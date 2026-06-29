@@ -34,7 +34,7 @@ function Dashboard() {
 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-  // Close mobile menu when view changes
+  // Close mobile menu when view changessss
   const handleViewChange = (view: 'tasks' | 'completed' | 'tools') => {
     setCurrentView(view);
     setIsMobileMenuOpen(false);
@@ -64,8 +64,8 @@ function Dashboard() {
         }));
         // Remove the raw junction keys
         enriched.forEach((t: any) => {
-            delete t.task_tools;
-            delete t.task_assets;
+          delete t.task_tools;
+          delete t.task_assets;
         });
         setTasks(enriched as Task[]);
       }
