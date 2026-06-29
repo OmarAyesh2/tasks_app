@@ -6,10 +6,11 @@ import { TaskCard } from './components/TaskCard';
 import { ToolCard } from './components/ToolCard';
 import { AddTaskModal } from './components/AddTaskModal';
 import { AddToolModal } from './components/AddToolModal';
+import { AddProjectModal } from './components/AddProjectModal';
 import { ConfirmModal } from './components/ConfirmModal';
 import { Plus, Loader2, Menu } from 'lucide-react';
 import { supabase } from './lib/supabase';
-import type { Task, Tool } from './types';
+import type { Task, Tool, Project } from './types';
 
 function Dashboard() {
   if (!supabase) return null;
@@ -19,11 +20,17 @@ function Dashboard() {
 
   const [tasks, setTasks] = useState<Task[]>([]);
   const [tools, setTools] = useState<Tool[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [currentProjectId, setCurrentProjectId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
 
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [isToolModalOpen, setIsToolModalOpen] = useState(false);
+  const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
   const [toolToEdit, setToolToEdit] = useState<Tool | null>(null);
+  const [taskToEdit, setTaskToEdit] = useState<Task | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<string>('All');
 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
@@ -34,15 +41,34 @@ function Dashboard() {
   };
 
   const fetchData = async () => {
-    setLoading(true);
+    if (isInitialLoad) setLoading(true);
     try {
-      // Fetch tasks
+      // Fetch tasks with attached tools via junction table
       const { data: tasksData } = await supabase!
         .from('tasks')
-        .select('*')
+        .select(`
+          *,
+          task_tools (
+            tool_id,
+            tools (*)
+          ),
+          task_assets (*)
+        `)
         .order('created_at', { ascending: false });
 
-      if (tasksData) setTasks(tasksData as Task[]);
+      if (tasksData) {
+        const enriched = tasksData.map((t: any) => ({
+          ...t,
+          tools: (t.task_tools ?? []).map((jt: any) => jt.tools).filter(Boolean),
+          assets: t.task_assets ?? [],
+        }));
+        // Remove the raw junction keys
+        enriched.forEach((t: any) => {
+            delete t.task_tools;
+            delete t.task_assets;
+        });
+        setTasks(enriched as Task[]);
+      }
 
       // Fetch tools
       const { data: toolsData } = await supabase!
@@ -50,11 +76,19 @@ function Dashboard() {
         .select('*')
         .order('created_at', { ascending: false });
 
+      // Fetch projects
+      const { data: projectsData } = await supabase!
+        .from('projects')
+        .select('*')
+        .order('created_at', { ascending: false });
+
       if (toolsData) setTools(toolsData as Tool[]);
+      if (projectsData) setProjects(projectsData as Project[]);
     } catch (error) {
       console.error('Error fetching data:', error);
     } finally {
       setLoading(false);
+      setIsInitialLoad(false);
     }
   };
 
@@ -65,22 +99,23 @@ function Dashboard() {
   }, [user]);
 
   const handleTaskStatusChange = async (task: Task) => {
-    const newStatus = task.status === 'to_do' ? 'done' : 'to_do';
+    handleTaskUpdate(task.id, { status: task.status === 'to_do' ? 'done' : 'to_do' });
+  };
 
+  const handleTaskUpdate = async (taskId: string, updates: Partial<Task>) => {
     // Optimistic update
-    setTasks(tasks.map(t =>
-      t.id === task.id ? { ...t, status: newStatus } : t
+    setTasks(prev => prev.map(t =>
+      t.id === taskId ? { ...t, ...updates } : t
     ));
 
     const { error } = await supabase!
       .from('tasks')
-      .update({ status: newStatus })
-      .eq('id', task.id);
+      .update(updates)
+      .eq('id', taskId);
 
     if (error) {
       console.error('Error updating task:', error);
-      // Revert if error
-      fetchData();
+      fetchData(); // Revert
     }
   };
 
@@ -94,6 +129,8 @@ function Dashboard() {
     type: 'task',
     item: null,
   });
+
+  const uniqueCategories = ['All', ...Array.from(new Set(tools.map(t => t.category).filter(Boolean) as string[])).sort()];
 
   const handleDeleteTask = (task: Task) => {
     setDeleteConfig({
@@ -139,7 +176,7 @@ function Dashboard() {
         .eq('id', item.id);
 
       if (error) {
-        console.error('Error deleting tool:', error);
+        console.error('Error deleting resource:', error);
         fetchData(); // Revert
       }
     }
@@ -157,17 +194,38 @@ function Dashboard() {
     return <Auth />;
   }
 
-  const filteredTasks = tasks.filter(t =>
-    currentView === 'tasks' ? t.status === 'to_do' : t.status === 'done'
-  );
+  const filteredTasks = tasks.filter(t => {
+    if (currentProjectId && t.project_id !== currentProjectId) return false;
+    return currentView === 'tasks' ? t.status === 'to_do' : t.status === 'done';
+  });
+
+  const filteredTools = tools.filter(t => {
+    if (currentProjectId && t.project_id !== currentProjectId) return false;
+    return selectedCategory === 'All' ? true : t.category === selectedCategory;
+  });
+
+  const currentProjectName = currentProjectId ? projects.find(p => p.id === currentProjectId)?.name : null;
 
   return (
     <div className="min-h-screen bg-background dark:bg-dark-bg text-text-main dark:text-slate-100 font-sans transition-colors duration-300">
       <Sidebar
         currentView={currentView}
-        onViewChange={handleViewChange}
+        onViewChange={(view) => {
+          setCurrentView(view);
+          setIsMobileMenuOpen(false);
+        }}
         isOpen={isMobileMenuOpen}
         onClose={() => setIsMobileMenuOpen(false)}
+        projects={projects}
+        currentProjectId={currentProjectId}
+        onProjectSelect={(id) => {
+          setCurrentProjectId(id);
+          setIsMobileMenuOpen(false);
+        }}
+        onNewProject={() => {
+          setIsProjectModalOpen(true);
+          setIsMobileMenuOpen(false);
+        }}
       />
 
       <main className="ml-0 md:ml-64 p-4 md:p-8 min-h-screen transition-all duration-300">
@@ -180,15 +238,22 @@ function Dashboard() {
               <Menu className="w-6 h-6" />
             </button>
             <div>
-              <h1 className="text-3xl font-bold text-text-main dark:text-slate-100 capitalize">
-                {currentView === 'tasks' ? 'Tasks' : currentView === 'completed' ? 'Completed Tasks' : 'Tools'}
-              </h1>
-              <p className="text-text-muted dark:text-slate-400 mt-1">
+              <div className="flex items-center gap-2 mb-1">
+                <h1 className="text-3xl font-bold text-text-main dark:text-slate-100 capitalize">
+                  {currentView === 'tasks' ? 'Tasks' : currentView === 'completed' ? 'Completed Tasks' : 'Resources'}
+                </h1>
+                {currentProjectName && (
+                  <span className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary border border-primary/20">
+                    {currentProjectName}
+                  </span>
+                )}
+              </div>
+              <p className="text-text-muted dark:text-slate-400">
                 {currentView === 'tasks'
                   ? `You have ${filteredTasks.length} pending tasks`
                   : currentView === 'completed'
                     ? `You have completed ${filteredTasks.length} tasks`
-                    : 'Your collection of useful tools'}
+                    : 'Your collection of useful resources'}
               </p>
             </div>
           </div>
@@ -199,35 +264,60 @@ function Dashboard() {
                 setToolToEdit(null);
                 setIsToolModalOpen(true);
               } else {
+                setTaskToEdit(null);
                 setIsTaskModalOpen(true);
               }
             }}
             className="btn-primary flex items-center gap-2 shadow-lg hover:shadow-primary/20 w-full md:w-auto justify-center"
           >
             <Plus className="w-5 h-5" />
-            Add {currentView === 'tools' ? 'Tool' : 'Task'}
+            Add {currentView === 'tools' ? 'Resource' : 'Task'}
           </button>
         </header>
 
-        {loading ? (
+        {isInitialLoad ? (
           <div className="flex justify-center py-12">
             <Loader2 className="w-8 h-8 animate-spin text-primary/50" />
           </div>
         ) : (
           <>
             {currentView === 'tools' ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {tools.map(tool => (
-                  <ToolCard
-                    key={tool.id}
-                    tool={tool}
-                    onEdit={() => {
-                      setToolToEdit(tool);
-                      setIsToolModalOpen(true);
-                    }}
-                    onDelete={() => handleDeleteTool(tool)}
-                  />
-                ))}
+              <div className="space-y-6">
+                {/* Category Filters */}
+                <div className="flex justify-start pb-2">
+                  <div className="relative inline-block w-48">
+                    <select
+                      value={selectedCategory}
+                      onChange={(e) => setSelectedCategory(e.target.value)}
+                      className="w-full appearance-none bg-white dark:bg-dark-surface border border-slate-200 dark:border-dark-border text-text-main dark:text-slate-100 py-2 pl-4 pr-10 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all cursor-pointer"
+                    >
+                      {uniqueCategories.map(category => (
+                        <option key={category} value={category}>
+                          {category}
+                        </option>
+                      ))}
+                    </select>
+                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-text-muted">
+                      <svg className="w-4 h-4 fill-current" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
+                        <path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z" />
+                      </svg>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {filteredTools.map(tool => (
+                    <ToolCard
+                      key={tool.id}
+                      tool={tool}
+                      onEdit={() => {
+                        setToolToEdit(tool);
+                        setIsToolModalOpen(true);
+                      }}
+                      onDelete={() => handleDeleteTool(tool)}
+                    />
+                  ))}
+                </div>
               </div>
             ) : (
               <div className="space-y-4 max-w-3xl">
@@ -241,6 +331,11 @@ function Dashboard() {
                       key={task.id}
                       task={task}
                       onStatusChange={handleTaskStatusChange}
+                      onUpdateTask={handleTaskUpdate}
+                      onEdit={() => {
+                        setTaskToEdit(task);
+                        setIsTaskModalOpen(true);
+                      }}
                       onDelete={() => handleDeleteTask(task)}
                     />
                   ))
@@ -252,8 +347,15 @@ function Dashboard() {
 
         <AddTaskModal
           isOpen={isTaskModalOpen}
-          onClose={() => setIsTaskModalOpen(false)}
-          onTaskAdded={fetchData}
+          onClose={() => {
+            setIsTaskModalOpen(false);
+            setTaskToEdit(null);
+          }}
+          onSuccess={fetchData}
+          tools={tools}
+          taskToEdit={taskToEdit}
+          projects={projects}
+          defaultProjectId={currentProjectId}
         />
 
         <AddToolModal
@@ -262,15 +364,23 @@ function Dashboard() {
             setIsToolModalOpen(false);
             setToolToEdit(null);
           }}
-          onToolAdded={fetchData}
+          onSuccess={fetchData}
           toolToEdit={toolToEdit}
+          projects={projects}
+          defaultProjectId={currentProjectId}
+        />
+
+        <AddProjectModal
+          isOpen={isProjectModalOpen}
+          onClose={() => setIsProjectModalOpen(false)}
+          onSuccess={fetchData}
         />
 
         <ConfirmModal
           isOpen={deleteConfig.isOpen}
           onClose={() => setDeleteConfig(prev => ({ ...prev, isOpen: false }))}
           onConfirm={confirmDelete}
-          title={deleteConfig.type === 'task' ? 'Delete Task' : 'Delete Tool'}
+          title={deleteConfig.type === 'task' ? 'Delete Task' : 'Delete Resource'}
           message={`Are you sure you want to delete "${deleteConfig.item?.name}"? This action cannot be undone.`}
         />
       </main>

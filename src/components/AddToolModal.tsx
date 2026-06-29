@@ -3,26 +3,31 @@ import { Modal } from './Modal';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import { Loader2 } from 'lucide-react';
-import type { Tool } from '../types';
+import type { Tool, Project } from '../types';
 
 interface AddToolModalProps {
     isOpen: boolean;
     onClose: () => void;
-    onToolAdded: () => void;
+    onSuccess: () => void;
     toolToEdit?: Tool | null;
+    projects: Project[];
+    defaultProjectId?: string | null;
 }
 
-export function AddToolModal({ isOpen, onClose, onToolAdded, toolToEdit }: AddToolModalProps) {
+export function AddToolModal({ isOpen, onClose, onSuccess, toolToEdit, projects, defaultProjectId }: AddToolModalProps) {
     const { user } = useAuth();
     const [loading, setLoading] = useState(false);
     const [name, setName] = useState('');
     const [description, setDescription] = useState('');
     const [link, setLink] = useState('');
+    const [category, setCategory] = useState('');
+    const [projectId, setProjectId] = useState<string | null>(defaultProjectId || null);
 
     const resetForm = () => {
         setName('');
         setDescription('');
         setLink('');
+        setCategory('');
     };
 
     useEffect(() => {
@@ -31,8 +36,11 @@ export function AddToolModal({ isOpen, onClose, onToolAdded, toolToEdit }: AddTo
                 setName(toolToEdit.name);
                 setDescription(toolToEdit.description || '');
                 setLink(toolToEdit.link);
+                setCategory(toolToEdit.category || '');
+                setProjectId(toolToEdit.project_id || null);
             } else {
                 resetForm();
+                setProjectId(defaultProjectId || null);
             }
         }
     }, [isOpen, toolToEdit]);
@@ -47,7 +55,9 @@ export function AddToolModal({ isOpen, onClose, onToolAdded, toolToEdit }: AddTo
                 const { error } = await supabase.from('tools').update({
                     name,
                     description: description || null,
-                    link
+                    link,
+                    category: category || null,
+                    project_id: projectId
                 }).eq('id', toolToEdit.id);
 
                 if (error) throw error;
@@ -56,35 +66,70 @@ export function AddToolModal({ isOpen, onClose, onToolAdded, toolToEdit }: AddTo
                     name,
                     description: description || null,
                     link,
-                    user_id: user.id
+                    category: category || null,
+                    user_id: user.id,
+                    project_id: projectId
                 });
 
                 if (error) throw error;
             }
 
-            onToolAdded();
+            onSuccess();
             resetForm();
             onClose();
         } catch (error) {
-            console.error('Error adding tool:', error);
+            console.error('Error adding resource:', error);
         } finally {
             setLoading(false);
         }
     };
 
     return (
-        <Modal isOpen={isOpen} onClose={onClose} title={toolToEdit ? "Edit Tool" : "New Tool"}>
+        <Modal isOpen={isOpen} onClose={onClose} title={toolToEdit ? "Edit Resource" : "New Resource"}>
             <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
-                    <label className="block text-sm font-medium text-text-muted mb-1">Tool Name</label>
+                    <label className="block text-sm font-medium text-text-muted mb-1">Resource Name</label>
                     <input
                         type="text"
                         value={name}
                         onChange={(e) => setName(e.target.value)}
                         className="input-field"
-                        placeholder="Tool Name"
+                        placeholder="Resource Name"
                         required
                     />
+                </div>
+
+                {/* Project Assignment */}
+                <div>
+                    <label className="block text-sm font-medium text-text-muted mb-1">Project Assignment</label>
+                    <select
+                        value={projectId || ''}
+                        onChange={(e) => setProjectId(e.target.value || null)}
+                        className="input-field"
+                    >
+                        <option value="">No Project (Workspace Default)</option>
+                        {projects.map(p => (
+                            <option key={p.id} value={p.id}>{p.name}</option>
+                        ))}
+                    </select>
+                </div>
+
+                <div>
+                    <label className="block text-sm font-medium text-text-muted mb-1">Category</label>
+                    <input
+                        type="text"
+                        list="resource-categories"
+                        value={category}
+                        onChange={(e) => setCategory(e.target.value)}
+                        className="input-field"
+                        placeholder="e.g. AI Tools, Design Reference..."
+                    />
+                    <datalist id="resource-categories">
+                        <option value="AI Tools" />
+                        <option value="Design Reference" />
+                        <option value="Assets" />
+                        <option value="Legal" />
+                    </datalist>
                 </div>
 
                 <div>
@@ -93,7 +138,7 @@ export function AddToolModal({ isOpen, onClose, onToolAdded, toolToEdit }: AddTo
                         value={description}
                         onChange={(e) => setDescription(e.target.value)}
                         className="input-field min-h-[100px] resize-none"
-                        placeholder="What is this tool for?"
+                        placeholder="What is this resource for?"
                     />
                 </div>
 
@@ -113,7 +158,7 @@ export function AddToolModal({ isOpen, onClose, onToolAdded, toolToEdit }: AddTo
                     <button
                         type="button"
                         onClick={onClose}
-                        className="px-4 py-2 text-text-muted hover:text-text-main font-medium transition-colors"
+                        className="px-4 py-2 text-text-muted hover:text-text-main dark:text-slate-400 dark:hover:text-slate-100 font-medium transition-colors"
                     >
                         Cancel
                     </button>
@@ -123,7 +168,7 @@ export function AddToolModal({ isOpen, onClose, onToolAdded, toolToEdit }: AddTo
                         className="btn-primary flex items-center gap-2"
                     >
                         {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-                        {toolToEdit ? "Save Changes" : "Add Tool"}
+                        {toolToEdit ? "Save Changes" : "Add Resource"}
                     </button>
                 </div>
             </form>

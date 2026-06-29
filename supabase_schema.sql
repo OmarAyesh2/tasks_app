@@ -9,6 +9,7 @@ create table tasks (
   description text,
   status text not null default 'to_do' check (status in ('to_do', 'done')),
   links jsonb default '[]'::jsonb, -- Array of { name: string, url: string }
+  sub_tasks jsonb default '[]'::jsonb, -- Array of { text: string, done: boolean }
   user_id uuid references auth.users(id) -- Optional: to track creator, but RLS will allow all to view/edit
 );
 
@@ -19,6 +20,7 @@ create table tools (
   name text not null,
   description text,
   link text not null,
+  category text,
   user_id uuid references auth.users(id) -- Optional
 );
 
@@ -39,6 +41,23 @@ create policy "Allow full access to authenticated users"
 -- Policy for TOOLS: Allow full access to authenticated users
 create policy "Allow full access to authenticated users"
   on tools
+  for all
+  to authenticated
+  using (true)
+  with check (true);
+
+-- TASK_TOOLS JUNCTION TABLE (many-to-many)
+create table task_tools (
+  id uuid default uuid_generate_v4() primary key,
+  task_id uuid references tasks(id) on delete cascade not null,
+  tool_id uuid references tools(id) on delete cascade not null,
+  unique(task_id, tool_id)
+);
+
+alter table task_tools enable row level security;
+
+create policy "Allow full access to authenticated users"
+  on task_tools
   for all
   to authenticated
   using (true)
