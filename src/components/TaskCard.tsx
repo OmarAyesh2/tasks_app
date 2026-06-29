@@ -40,12 +40,22 @@ Description: ${task.description || 'No description provided'}
 
 Strictly return a JSON array of sub-task objects formatted exactly like this: [{"text": "Sub-task description", "done": false}]. Each sub-task must be ultra-concise, punchy, and actionable. Limit each step to a maximum of 5 to 8 words. Crucially, DO NOT include any parentheses, detailed explanations, or descriptive examples. Just output the raw action step. You must generate a maximum of 5 sub-tasks total per task. Do not exceed 5 items under any circumstances. If the task is complex, only provide the top 5 most critical foundational steps. CRITICAL: Detect the language used in the task's name and description (e.g., Arabic, English). You MUST return the text values inside the JSON array strictly in that exact same language. Do not mix languages or translate the output to English if the input is in Arabic. No conversational filler text, no markdown code block formatting like \`\`\`json, just the raw JSON array.`;
 
-            const response = await gemini.models.generateContent({
-                model: 'gemini-2.5-flash',
-                contents: prompt,
+            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${import.meta.env.VITE_GEMINI_API_KEY}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    contents: [{ parts: [{ text: prompt }] }]
+                })
             });
 
-            const responseText = response.text || '[]';
+            if (!response.ok) {
+                throw new Error(`API error: ${response.status}`);
+            }
+
+            const data = await response.json();
+            const responseText = data.candidates?.[0]?.content?.parts?.[0]?.text || '[]';
             const cleanJson = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
             const generatedSubTasks = JSON.parse(cleanJson);
 
