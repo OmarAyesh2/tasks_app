@@ -2,7 +2,6 @@ import { useState, useRef } from 'react';
 import type { Task } from '../types';
 import { Check, Link as LinkIcon, ExternalLink, Trash2, Library, Pencil, Loader2, Sparkles, Plus, X, Paperclip, File as FileIcon } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import { gemini } from '../lib/gemini';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
