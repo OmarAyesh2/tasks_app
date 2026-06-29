@@ -22,7 +22,6 @@ function Dashboard() {
   const [tools, setTools] = useState<Tool[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [currentProjectId, setCurrentProjectId] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
 
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
@@ -34,14 +33,7 @@ function Dashboard() {
 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-  // Close mobile menu when view changessss
-  const handleViewChange = (view: 'tasks' | 'completed' | 'tools') => {
-    setCurrentView(view);
-    setIsMobileMenuOpen(false);
-  };
-
   const fetchData = async () => {
-    if (isInitialLoad) setLoading(true);
     try {
       // Fetch tasks with attached tools via junction table
       const { data: tasksData } = await supabase!
@@ -87,7 +79,6 @@ function Dashboard() {
     } catch (error) {
       console.error('Error fetching data:', error);
     } finally {
-      setLoading(false);
       setIsInitialLoad(false);
     }
   };
