@@ -173,6 +173,30 @@ function Dashboard() {
     }
   };
 
+  const handleDeleteProject = async (projectId: string, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (!confirm("Are you sure you want to delete this project? All associated tasks will be lost.")) return;
+
+    try {
+      const { error } = await supabase!.from('projects').delete().eq('id', projectId);
+
+      if (error) {
+        throw error;
+      }
+
+      const remainingProjects = projects.filter(p => p.id !== projectId);
+      setProjects(remainingProjects);
+
+      if (currentProjectId === projectId) {
+        setCurrentProjectId(remainingProjects.length > 0 ? remainingProjects[0].id : null);
+      }
+    } catch (error: any) {
+      alert(`Error deleting project: ${error.message || error}`);
+    }
+  };
+
   if (authLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
@@ -217,6 +241,7 @@ function Dashboard() {
           setIsProjectModalOpen(true);
           setIsMobileMenuOpen(false);
         }}
+        onDeleteProject={handleDeleteProject}
       />
 
       <main className="ml-0 md:ml-64 p-4 md:p-8 min-h-screen transition-all duration-300">

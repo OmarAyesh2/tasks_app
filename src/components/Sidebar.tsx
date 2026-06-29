@@ -1,4 +1,4 @@
-import { LayoutList, CheckSquare, Library, LogOut, Sun, Moon, X, Plus, Folder } from 'lucide-react';
+import { LayoutList, CheckSquare, Library, LogOut, Sun, Moon, X, Plus, Folder, Trash2 } from 'lucide-react';
 import type { Project } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
@@ -16,9 +16,10 @@ interface SidebarProps {
     currentProjectId: string | null;
     onProjectSelect: (id: string | null) => void;
     onNewProject: () => void;
+    onDeleteProject: (projectId: string, e: React.MouseEvent) => void;
 }
 
-export function Sidebar({ currentView, onViewChange, isOpen, onClose, projects, currentProjectId, onProjectSelect, onNewProject }: SidebarProps) {
+export function Sidebar({ currentView, onViewChange, isOpen, onClose, projects, currentProjectId, onProjectSelect, onNewProject, onDeleteProject }: SidebarProps) {
     const { signOut, user } = useAuth();
     const { theme, toggleTheme } = useTheme();
 
@@ -114,22 +115,30 @@ export function Sidebar({ currentView, onViewChange, isOpen, onClose, projects, 
                         </button>
 
                         {projects.map(project => (
-                            <button
-                                key={project.id}
-                                onClick={() => onProjectSelect(project.id)}
-                                className={cn(
-                                    "w-full flex items-center gap-3 px-4 py-2 rounded-xl text-sm transition-all duration-200 truncate",
-                                    currentProjectId === project.id
-                                        ? "bg-primary/10 text-primary font-medium"
-                                        : "text-text-muted hover:bg-slate-50 hover:text-text-main dark:hover:bg-slate-800/50 dark:hover:text-slate-200"
-                                )}
-                            >
-                                <span className={cn(
-                                    "w-2 h-2 rounded-full flex-shrink-0",
-                                    currentProjectId === project.id ? "bg-primary" : "bg-slate-300 dark:bg-slate-600"
-                                )} />
-                                <span className="truncate">{project.name}</span>
-                            </button>
+                            <div key={project.id} className="relative group flex items-center">
+                                <button
+                                    onClick={() => onProjectSelect(project.id)}
+                                    className={cn(
+                                        "flex-1 flex items-center gap-3 px-4 py-2 rounded-xl text-sm transition-all duration-200 truncate pr-10",
+                                        currentProjectId === project.id
+                                            ? "bg-primary/10 text-primary font-medium"
+                                            : "text-text-muted hover:bg-slate-50 hover:text-text-main dark:hover:bg-slate-800/50 dark:hover:text-slate-200"
+                                    )}
+                                >
+                                    <span className={cn(
+                                        "w-2 h-2 rounded-full flex-shrink-0",
+                                        currentProjectId === project.id ? "bg-primary" : "bg-slate-300 dark:bg-slate-600"
+                                    )} />
+                                    <span className="truncate">{project.name}</span>
+                                </button>
+                                <button
+                                    onClick={(e) => onDeleteProject(project.id, e)}
+                                    className="absolute right-2 opacity-0 group-hover:opacity-100 p-1.5 text-slate-400 hover:text-red-500 rounded-md hover:bg-red-50 dark:hover:bg-red-900/20 transition-all duration-200"
+                                    title="Delete Project"
+                                >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                            </div>
                         ))}
                     </div>
                 </div>
