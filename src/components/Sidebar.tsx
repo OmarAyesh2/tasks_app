@@ -1,4 +1,4 @@
-import { LayoutList, CheckSquare, Library, LogOut, Sun, Moon, X, Plus, Folder, Trash2, Users } from 'lucide-react';
+import { LayoutList, CheckSquare, Library, LogOut, Sun, Moon, X, Plus, Folder, Trash2, Users, Clock } from 'lucide-react';
 import type { Project } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
@@ -7,7 +7,7 @@ import { WorkspaceSelector } from './WorkspaceSelector';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
-type View = 'tasks' | 'completed' | 'tools' | 'members';
+type View = 'tasks' | 'completed' | 'tools' | 'members' | 'work_time';
 
 interface SidebarProps {
     currentView: View;
@@ -24,16 +24,19 @@ interface SidebarProps {
 export function Sidebar({ currentView, onViewChange, isOpen, onClose, projects, currentProjectId, onProjectSelect, onNewProject, onDeleteProject }: SidebarProps) {
     const { signOut, user } = useAuth();
     const { theme, toggleTheme } = useTheme();
-    const { currentMemberProfile } = useWorkspace();
+    const { currentMemberProfile, activeWorkspace } = useWorkspace();
     
     const canManageProjects = currentMemberProfile?.permission_role === 'owner' || currentMemberProfile?.permission_role === 'admin';
 
-    const navItems = [
+    const navItems: { id: View; label: string; icon: React.ElementType }[] = [
         { id: 'tasks', label: 'Tasks', icon: LayoutList },
         { id: 'completed', label: 'Completed', icon: CheckSquare },
         { id: 'tools', label: 'Resources', icon: Library },
         { id: 'members', label: 'Members', icon: Users },
-    ] as const;
+        ...(activeWorkspace?.time_tracking_enabled && currentMemberProfile?.permission_role !== 'viewer' 
+            ? [{ id: 'work_time' as View, label: 'Work Time', icon: Clock }] 
+            : [])
+    ];
 
     function cn(...inputs: string[]) {
         return twMerge(clsx(inputs));

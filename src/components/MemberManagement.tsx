@@ -21,6 +21,8 @@ export function MemberManagement() {
         currentMemberProfile,
         inviteUser,
         leaveWorkspace,
+        refreshWorkspaces,
+        setActiveWorkspace,
     } = useWorkspace();
 
     // ---------------------------------------------------------------
@@ -43,6 +45,43 @@ export function MemberManagement() {
         currentMemberProfile?.permission_role === 'admin';
 
     const isOwner = currentMemberProfile?.permission_role === 'owner';
+
+    // ---------------------------------------------------------------
+    // Time tracking toggle
+    // ---------------------------------------------------------------
+    const [updatingTracking, setUpdatingTracking] = useState(false);
+
+    const handleToggleTimeTracking = async () => {
+        if (!activeWorkspace) return;
+        setUpdatingTracking(true);
+        const newState = !activeWorkspace.time_tracking_enabled;
+        
+        console.log(`[Time Tracking] Toggling for workspace ID: ${activeWorkspace.id}`);
+        console.log(`[Time Tracking] Target state: ${newState}`);
+
+        try {
+            const { data, error } = await supabase!
+                .from('workspaces')
+                .update({ time_tracking_enabled: newState })
+                .eq('id', activeWorkspace.id)
+                .select();
+            
+            console.log(`[Time Tracking] Update response data:`, data);
+            
+            if (error) throw error;
+            
+            if (data && data[0]) {
+                setActiveWorkspace(data[0] as typeof activeWorkspace);
+            } else {
+                await refreshWorkspaces();
+            }
+        } catch (error) {
+            console.error('Error toggling time tracking:', error);
+            alert('Failed to update time tracking setting.');
+        } finally {
+            setUpdatingTracking(false);
+        }
+    };
 
     // ---------------------------------------------------------------
     // Fetch members
@@ -153,6 +192,40 @@ export function MemberManagement() {
 
     return (
         <div className="max-w-3xl space-y-8">
+            {/* Owner Feature Toggles */}
+            {isOwner && (
+                <div className="card-base p-6 flex items-center justify-between">
+                    <div>
+                        <div className="flex items-center gap-2 mb-1">
+                            <Clock className="w-5 h-5 text-primary" />
+                            <h2 className="text-lg font-semibold text-text-main dark:text-slate-100">
+                                Enable Employee Time Tracking
+                            </h2>
+                        </div>
+                        <p className="text-sm text-text-muted dark:text-slate-400">
+                            Allow team members to log hours spent on workspace tasks.
+                        </p>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={handleToggleTimeTracking}
+                        disabled={updatingTracking}
+                        className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary/50 focus:ring-offset-2 ${
+                            activeWorkspace.time_tracking_enabled ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-600'
+                        } ${updatingTracking ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        role="switch"
+                        aria-checked={!!activeWorkspace.time_tracking_enabled}
+                    >
+                        <span
+                            aria-hidden="true"
+                            className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                                activeWorkspace.time_tracking_enabled ? 'translate-x-5' : 'translate-x-0'
+                            }`}
+                        />
+                    </button>
+                </div>
+            )}
+
             {/* Invite Form — only for owners/admins */}
             {isAdmin && (
                 <div className="card-base p-6">

@@ -11,6 +11,7 @@ import { AddToolModal } from './components/AddToolModal';
 import { AddProjectModal } from './components/AddProjectModal';
 import { ConfirmModal } from './components/ConfirmModal';
 import { MemberManagement } from './components/MemberManagement';
+import { WorkTime } from './components/WorkTime';
 import { Plus, Loader2, Menu } from 'lucide-react';
 import { supabase } from './lib/supabase';
 import type { Task, Tool, Project } from './types';
@@ -20,7 +21,7 @@ function Dashboard() {
 
   const { user, loading: authLoading } = useAuth();
   const { activeWorkspace, currentMemberProfile, loading: workspaceLoading } = useWorkspace();
-  const [currentView, setCurrentView] = useState<'tasks' | 'completed' | 'tools' | 'members'>('tasks');
+  const [currentView, setCurrentView] = useState<'tasks' | 'completed' | 'tools' | 'members' | 'work_time'>('tasks');
   const [selectedMemberFilter, setSelectedMemberFilter] = useState<string>('all');
 
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -289,7 +290,11 @@ function Dashboard() {
             <div>
               <div className="flex items-center gap-2 mb-1">
                 <h1 className="text-3xl font-bold text-text-main dark:text-slate-100 capitalize">
-                  {currentView === 'tasks' ? 'Tasks' : currentView === 'completed' ? 'Completed Tasks' : currentView === 'members' ? 'Members' : 'Resources'}
+                  {currentView === 'tasks' ? 'Tasks' 
+                   : currentView === 'completed' ? 'Completed Tasks' 
+                   : currentView === 'members' ? 'Members' 
+                   : currentView === 'work_time' ? 'Work Time'
+                   : 'Resources'}
                 </h1>
                 {currentProjectName && (
                   <span className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary border border-primary/20">
@@ -304,12 +309,14 @@ function Dashboard() {
                     ? `You have completed ${filteredTasks.length} tasks`
                     : currentView === 'members'
                       ? 'Manage your workspace team'
-                      : 'Your collection of useful resources'}
+                      : currentView === 'work_time'
+                        ? 'Track your daily work hours'
+                        : 'Your collection of useful resources'}
               </p>
             </div>
           </div>
 
-          {currentView !== 'members' && currentMemberProfile?.permission_role !== 'viewer' && (
+          {currentView !== 'members' && currentView !== 'work_time' && currentMemberProfile?.permission_role !== 'viewer' && (
             <button
               onClick={() => {
                 if (currentView === 'tools') {
@@ -336,6 +343,8 @@ function Dashboard() {
           <>
             {currentView === 'members' ? (
               <MemberManagement />
+            ) : currentView === 'work_time' ? (
+              <WorkTime />
             ) : currentView === 'tools' ? (
               <div className="space-y-6">
                 {/* Category Filters */}
