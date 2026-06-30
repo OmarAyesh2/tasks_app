@@ -55,7 +55,7 @@ export function Sidebar({ currentView, onViewChange, isOpen, onClose, projects, 
 
             {/* Sidebar */}
             <div className={cn(
-                "h-screen w-64 glass-sidebar flex flex-col fixed left-0 top-0 transition-transform duration-300 z-50",
+                "h-[100dvh] w-64 glass-sidebar flex flex-col fixed left-0 top-0 transition-transform duration-300 z-50",
                 isOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
             )}>
                 <div className="p-6 border-b border-slate-200/50 dark:border-dark-border/50">
@@ -74,7 +74,8 @@ export function Sidebar({ currentView, onViewChange, isOpen, onClose, projects, 
                     <p className="text-xs text-text-muted mt-3 truncate">{user?.email}</p>
                 </div>
 
-                <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
+                <div className="flex-1 overflow-y-auto min-h-0 flex flex-col">
+                    <nav className="p-4 space-y-2 flex-shrink-0">
                     {navItems.map((item) => {
                         const Icon = item.icon;
                         const isActive = currentView === item.id;
@@ -95,10 +96,10 @@ export function Sidebar({ currentView, onViewChange, isOpen, onClose, projects, 
                             </button>
                         );
                     })}
-                </nav>
+                    </nav>
 
-                {/* Projects Section */}
-                <div className="flex-1 p-4 overflow-y-auto border-t border-slate-200/50 dark:border-dark-border/50">
+                    {/* Projects Section */}
+                    <div className="p-4 border-t border-slate-200/50 dark:border-dark-border/50 flex-shrink-0">
                     <div className="flex items-center justify-between mb-2 px-2">
                         <h2 className="text-xs font-semibold text-text-muted uppercase tracking-wider">Projects</h2>
                         {canManageProjects && (
@@ -156,8 +157,9 @@ export function Sidebar({ currentView, onViewChange, isOpen, onClose, projects, 
                         ))}
                     </div>
                 </div>
+                </div>
 
-                <div className="p-4 border-t border-slate-200/50 dark:border-dark-border/50 space-y-2">
+                <div className="p-4 border-t border-slate-200/50 dark:border-dark-border/50 space-y-2 flex-shrink-0">
                     <button
                         onClick={toggleTheme}
                         className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-text-muted hover:bg-slate-50 hover:text-text-main dark:hover:bg-slate-800 dark:hover:text-slate-100 transition-all duration-200"

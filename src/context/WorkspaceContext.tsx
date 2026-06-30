@@ -170,8 +170,8 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   // -------------------------------------------
   // Full load / reload sequence
   // -------------------------------------------
-  const loadWorkspaces = useCallback(async () => {
-    setLoading(true);
+  const loadWorkspaces = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       // Accept any pending invites before fetching workspaces so newly
       // accepted workspaces appear immediately.
@@ -206,7 +206,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
 
       await fetchMemberProfile(target.id);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [fetchWorkspaces, fetchMemberProfile, acceptPendingInvites]);
 
@@ -245,7 +245,8 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
       if (event === 'SIGNED_IN') {
-        loadWorkspaces();
+        // Run silently if already initialized to prevent layout flashes on tab focus
+        loadWorkspaces(initialised.current);
       } else if (event === 'SIGNED_OUT') {
         setWorkspaces([]);
         setActiveWorkspaceState(null);
