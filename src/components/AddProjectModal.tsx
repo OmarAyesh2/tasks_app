@@ -3,6 +3,7 @@ import { Modal } from './Modal';
 import { supabase } from '../lib/supabase';
 import { Loader2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { useWorkspace } from '../context/WorkspaceContext';
 
 interface AddProjectModalProps {
     isOpen: boolean;
@@ -12,6 +13,7 @@ interface AddProjectModalProps {
 
 export function AddProjectModal({ isOpen, onClose, onSuccess }: AddProjectModalProps) {
     const { user } = useAuth();
+    const { activeWorkspace } = useWorkspace();
     const [loading, setLoading] = useState(false);
     const [name, setName] = useState('');
     const [description, setDescription] = useState('');
@@ -25,13 +27,15 @@ export function AddProjectModal({ isOpen, onClose, onSuccess }: AddProjectModalP
         e.preventDefault();
         if (!user) return;
         if (!supabase) return;
+        if (!activeWorkspace) return;
 
         setLoading(true);
         try {
             const { error } = await supabase.from('projects').insert({
                 name,
                 description: description || null,
-                user_id: user.id
+                user_id: user.id,
+                workspace_id: activeWorkspace.id
             });
 
             if (error) throw error;

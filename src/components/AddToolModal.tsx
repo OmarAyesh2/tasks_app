@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Modal } from './Modal';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
+import { useWorkspace } from '../context/WorkspaceContext';
 import { Loader2 } from 'lucide-react';
 import type { Tool, Project } from '../types';
 
@@ -16,6 +17,7 @@ interface AddToolModalProps {
 
 export function AddToolModal({ isOpen, onClose, onSuccess, toolToEdit, projects, defaultProjectId }: AddToolModalProps) {
     const { user } = useAuth();
+    const { activeWorkspace } = useWorkspace();
     const [loading, setLoading] = useState(false);
     const [name, setName] = useState('');
     const [description, setDescription] = useState('');
@@ -47,7 +49,7 @@ export function AddToolModal({ isOpen, onClose, onSuccess, toolToEdit, projects,
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!user || !supabase) return;
+        if (!user || !supabase || !activeWorkspace) return;
 
         setLoading(true);
         try {
@@ -68,7 +70,8 @@ export function AddToolModal({ isOpen, onClose, onSuccess, toolToEdit, projects,
                     link,
                     category: category || null,
                     user_id: user.id,
-                    project_id: projectId
+                    project_id: projectId,
+                    workspace_id: activeWorkspace.id
                 });
 
                 if (error) throw error;

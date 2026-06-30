@@ -1,11 +1,13 @@
-import { LayoutList, CheckSquare, Library, LogOut, Sun, Moon, X, Plus, Folder, Trash2 } from 'lucide-react';
+import { LayoutList, CheckSquare, Library, LogOut, Sun, Moon, X, Plus, Folder, Trash2, Users } from 'lucide-react';
 import type { Project } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
+import { useWorkspace } from '../context/WorkspaceContext';
+import { WorkspaceSelector } from './WorkspaceSelector';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
-type View = 'tasks' | 'completed' | 'tools';
+type View = 'tasks' | 'completed' | 'tools' | 'members';
 
 interface SidebarProps {
     currentView: View;
@@ -22,11 +24,15 @@ interface SidebarProps {
 export function Sidebar({ currentView, onViewChange, isOpen, onClose, projects, currentProjectId, onProjectSelect, onNewProject, onDeleteProject }: SidebarProps) {
     const { signOut, user } = useAuth();
     const { theme, toggleTheme } = useTheme();
+    const { currentMemberProfile } = useWorkspace();
+    
+    const canManageProjects = currentMemberProfile?.permission_role === 'owner' || currentMemberProfile?.permission_role === 'admin';
 
     const navItems = [
         { id: 'tasks', label: 'Tasks', icon: LayoutList },
         { id: 'completed', label: 'Completed', icon: CheckSquare },
         { id: 'tools', label: 'Resources', icon: Library },
+        { id: 'members', label: 'Members', icon: Users },
     ] as const;
 
     function cn(...inputs: string[]) {
@@ -49,19 +55,20 @@ export function Sidebar({ currentView, onViewChange, isOpen, onClose, projects, 
                 "h-screen w-64 glass-sidebar flex flex-col fixed left-0 top-0 transition-transform duration-300 z-50",
                 isOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
             )}>
-                <div className="p-6 border-b border-slate-200/50 dark:border-dark-border/50 flex items-center justify-between">
-                    <div>
+                <div className="p-6 border-b border-slate-200/50 dark:border-dark-border/50">
+                    <div className="flex items-center justify-between mb-4">
                         <h1 className="text-xl font-bold bg-gradient-to-r from-primary to-primary-hover bg-clip-text text-transparent">
                             Workspace
                         </h1>
-                        <p className="text-xs text-text-muted mt-1 truncate max-w-[150px]">{user?.email}</p>
+                        <button
+                            onClick={onClose}
+                            className="md:hidden p-1 text-text-muted hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg transition-colors"
+                        >
+                            <X className="w-5 h-5" />
+                        </button>
                     </div>
-                    <button
-                        onClick={onClose}
-                        className="md:hidden p-1 text-text-muted hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg transition-colors"
-                    >
-                        <X className="w-5 h-5" />
-                    </button>
+                    <WorkspaceSelector />
+                    <p className="text-xs text-text-muted mt-3 truncate">{user?.email}</p>
                 </div>
 
                 <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
@@ -91,13 +98,15 @@ export function Sidebar({ currentView, onViewChange, isOpen, onClose, projects, 
                 <div className="flex-1 p-4 overflow-y-auto border-t border-slate-200/50 dark:border-dark-border/50">
                     <div className="flex items-center justify-between mb-2 px-2">
                         <h2 className="text-xs font-semibold text-text-muted uppercase tracking-wider">Projects</h2>
-                        <button
-                            onClick={onNewProject}
-                            className="p-1 text-primary hover:bg-primary/10 rounded transition-colors"
-                            title="New Project"
-                        >
-                            <Plus className="w-4 h-4" />
-                        </button>
+                        {canManageProjects && (
+                            <button
+                                onClick={onNewProject}
+                                className="p-1 text-primary hover:bg-primary/10 rounded transition-colors"
+                                title="New Project"
+                            >
+                                <Plus className="w-4 h-4" />
+                            </button>
+                        )}
                     </div>
                     
                     <div className="space-y-1">
@@ -131,13 +140,15 @@ export function Sidebar({ currentView, onViewChange, isOpen, onClose, projects, 
                                     )} />
                                     <span className="truncate">{project.name}</span>
                                 </button>
-                                <button
-                                    onClick={(e) => onDeleteProject(project.id, e)}
-                                    className="absolute right-2 opacity-0 group-hover:opacity-100 p-1.5 text-slate-400 hover:text-red-500 rounded-md hover:bg-red-50 dark:hover:bg-red-900/20 transition-all duration-200"
-                                    title="Delete Project"
-                                >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                </button>
+                                {canManageProjects && (
+                                    <button
+                                        onClick={(e) => onDeleteProject(project.id, e)}
+                                        className="absolute right-2 opacity-0 group-hover:opacity-100 p-1.5 text-slate-400 hover:text-red-500 rounded-md hover:bg-red-50 dark:hover:bg-red-900/20 transition-all duration-200"
+                                        title="Delete Project"
+                                    >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                )}
                             </div>
                         ))}
                     </div>

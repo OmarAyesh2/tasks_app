@@ -41,6 +41,7 @@ export type Task = {
     links: Link[] | null;
     user_id: string;
     project_id?: string | null;
+    assigned_to_member?: string | null;
     sub_tasks?: SubTask[] | null;
     tools?: Tool[];
     assets?: TaskAsset[];

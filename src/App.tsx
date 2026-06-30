@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { useWorkspace } from './context/WorkspaceContext';
+import type { WorkspaceMember } from './context/WorkspaceContext';
 import { Auth } from './components/Auth';
 import { Sidebar } from './components/Sidebar';
 import { TaskCard } from './components/TaskCard';
@@ -8,6 +10,7 @@ import { AddTaskModal } from './components/AddTaskModal';
 import { AddToolModal } from './components/AddToolModal';
 import { AddProjectModal } from './components/AddProjectModal';
 import { ConfirmModal } from './components/ConfirmModal';
+import { MemberManagement } from './components/MemberManagement';
 import { Plus, Loader2, Menu } from 'lucide-react';
 import { supabase } from './lib/supabase';
 import type { Task, Tool, Project } from './types';
@@ -16,11 +19,14 @@ function Dashboard() {
   if (!supabase) return null;
 
   const { user, loading: authLoading } = useAuth();
-  const [currentView, setCurrentView] = useState<'tasks' | 'completed' | 'tools'>('tasks');
+  const { activeWorkspace, currentMemberProfile, loading: workspaceLoading } = useWorkspace();
+  const [currentView, setCurrentView] = useState<'tasks' | 'completed' | 'tools' | 'members'>('tasks');
+  const [selectedMemberFilter, setSelectedMemberFilter] = useState<string>('all');
 
   const [tasks, setTasks] = useState<Task[]>([]);
   const [tools, setTools] = useState<Tool[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
+  const [members, setMembers] = useState<WorkspaceMember[]>([]);
   const [currentProjectId, setCurrentProjectId] = useState<string | null>(null);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
 
@@ -34,6 +40,15 @@ function Dashboard() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const fetchData = async () => {
+    if (!activeWorkspace) {
+      setTasks([]);
+      setTools([]);
+      setProjects([]);
+      setMembers([]);
+      setIsInitialLoad(false);
+      return;
+    }
+
     try {
       // Fetch tasks with attached tools via junction table
       const { data: tasksData } = await supabase!
@@ -46,6 +61,7 @@ function Dashboard() {
           ),
           task_assets (*)
         `)
+        .eq('workspace_id', activeWorkspace.id)
         .order('created_at', { ascending: false });
 
       if (tasksData) {
@@ -66,16 +82,26 @@ function Dashboard() {
       const { data: toolsData } = await supabase!
         .from('tools')
         .select('*')
+        .eq('workspace_id', activeWorkspace.id)
         .order('created_at', { ascending: false });
 
       // Fetch projects
       const { data: projectsData } = await supabase!
         .from('projects')
         .select('*')
+        .eq('workspace_id', activeWorkspace.id)
         .order('created_at', { ascending: false });
+
+      // Fetch members
+      const { data: membersData } = await supabase!
+        .from('workspace_members')
+        .select('*')
+        .eq('workspace_id', activeWorkspace.id)
+        .eq('status', 'active');
 
       if (toolsData) setTools(toolsData as Tool[]);
       if (projectsData) setProjects(projectsData as Project[]);
+      if (membersData) setMembers(membersData as WorkspaceMember[]);
     } catch (error) {
       console.error('Error fetching data:', error);
     } finally {
@@ -87,7 +113,7 @@ function Dashboard() {
     if (user) {
       fetchData();
     }
-  }, [user]);
+  }, [user, activeWorkspace?.id]);
 
   const handleTaskStatusChange = async (task: Task) => {
     handleTaskUpdate(task.id, { status: task.status === 'to_do' ? 'done' : 'to_do' });
@@ -197,7 +223,7 @@ function Dashboard() {
     }
   };
 
-  if (authLoading) {
+  if (authLoading || workspaceLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <Loader2 className="w-8 h-8 animate-spin text-primary" />
@@ -211,6 +237,13 @@ function Dashboard() {
 
   const filteredTasks = tasks.filter(t => {
     if (currentProjectId && t.project_id !== currentProjectId) return false;
+    
+    if (selectedMemberFilter === 'me') {
+      if (t.assigned_to_member !== currentMemberProfile?.id) return false;
+    } else if (selectedMemberFilter !== 'all') {
+      if (t.assigned_to_member !== selectedMemberFilter) return false;
+    }
+
     return currentView === 'tasks' ? t.status === 'to_do' : t.status === 'done';
   });
 
@@ -256,7 +289,7 @@ function Dashboard() {
             <div>
               <div className="flex items-center gap-2 mb-1">
                 <h1 className="text-3xl font-bold text-text-main dark:text-slate-100 capitalize">
-                  {currentView === 'tasks' ? 'Tasks' : currentView === 'completed' ? 'Completed Tasks' : 'Resources'}
+                  {currentView === 'tasks' ? 'Tasks' : currentView === 'completed' ? 'Completed Tasks' : currentView === 'members' ? 'Members' : 'Resources'}
                 </h1>
                 {currentProjectName && (
                   <span className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary border border-primary/20">
@@ -269,26 +302,30 @@ function Dashboard() {
                   ? `You have ${filteredTasks.length} pending tasks`
                   : currentView === 'completed'
                     ? `You have completed ${filteredTasks.length} tasks`
-                    : 'Your collection of useful resources'}
+                    : currentView === 'members'
+                      ? 'Manage your workspace team'
+                      : 'Your collection of useful resources'}
               </p>
             </div>
           </div>
 
-          <button
-            onClick={() => {
-              if (currentView === 'tools') {
-                setToolToEdit(null);
-                setIsToolModalOpen(true);
-              } else {
-                setTaskToEdit(null);
-                setIsTaskModalOpen(true);
-              }
-            }}
-            className="btn-primary flex items-center gap-2 shadow-lg hover:shadow-primary/20 w-full md:w-auto justify-center"
-          >
-            <Plus className="w-5 h-5" />
-            Add {currentView === 'tools' ? 'Resource' : 'Task'}
-          </button>
+          {currentView !== 'members' && currentMemberProfile?.permission_role !== 'viewer' && (
+            <button
+              onClick={() => {
+                if (currentView === 'tools') {
+                  setToolToEdit(null);
+                  setIsToolModalOpen(true);
+                } else {
+                  setTaskToEdit(null);
+                  setIsTaskModalOpen(true);
+                }
+              }}
+              className="btn-primary flex items-center gap-2 shadow-lg hover:shadow-primary/20 w-full md:w-auto justify-center"
+            >
+              <Plus className="w-5 h-5" />
+              Add {currentView === 'tools' ? 'Resource' : 'Task'}
+            </button>
+          )}
         </header>
 
         {isInitialLoad ? (
@@ -297,7 +334,9 @@ function Dashboard() {
           </div>
         ) : (
           <>
-            {currentView === 'tools' ? (
+            {currentView === 'members' ? (
+              <MemberManagement />
+            ) : currentView === 'tools' ? (
               <div className="space-y-6">
                 {/* Category Filters */}
                 <div className="flex justify-start pb-2">
@@ -336,16 +375,39 @@ function Dashboard() {
                 </div>
               </div>
             ) : (
-              <div className="space-y-4 max-w-3xl">
-                {filteredTasks.length === 0 ? (
-                  <div className="text-center py-12 bg-white/50 dark:bg-dark-surface/50 rounded-2xl border border-dashed border-slate-300 dark:border-dark-border">
-                    <p className="text-text-muted dark:text-slate-400">No items found</p>
+              <div className="max-w-3xl">
+                {/* Task Filter for Owners/Admins */}
+                {(currentMemberProfile?.permission_role === 'owner' || currentMemberProfile?.permission_role === 'admin') && (
+                  <div className="flex justify-end mb-4">
+                    <select
+                      value={selectedMemberFilter}
+                      onChange={(e) => setSelectedMemberFilter(e.target.value)}
+                      className="input-field max-w-xs text-sm py-1.5 cursor-pointer"
+                    >
+                      <option value="all">All Members</option>
+                      <option value="me">Assigned to Me</option>
+                      {members
+                        .filter(m => m.user_id !== currentMemberProfile?.user_id)
+                        .map(m => (
+                        <option key={m.id} value={m.id}>
+                          {m.member_title ? `${m.email.split('@')[0]} (${m.member_title})` : m.email.split('@')[0]}
+                        </option>
+                      ))}
+                    </select>
                   </div>
+                )}
+
+                <div className="space-y-4">
+                  {filteredTasks.length === 0 ? (
+                    <div className="text-center py-12 bg-white/50 dark:bg-dark-surface/50 rounded-2xl border border-dashed border-slate-300 dark:border-dark-border">
+                      <p className="text-text-muted dark:text-slate-400">No items found</p>
+                    </div>
                 ) : (
                   filteredTasks.map(task => (
                     <TaskCard
                       key={task.id}
                       task={task}
+                      members={members}
                       onStatusChange={handleTaskStatusChange}
                       onUpdateTask={handleTaskUpdate}
                       onEdit={() => {
@@ -356,6 +418,7 @@ function Dashboard() {
                     />
                   ))
                 )}
+                </div>
               </div>
             )}
           </>
@@ -369,6 +432,7 @@ function Dashboard() {
           }}
           onSuccess={fetchData}
           tools={tools}
+          members={members}
           taskToEdit={taskToEdit}
           projects={projects}
           defaultProjectId={currentProjectId}
@@ -405,12 +469,15 @@ function Dashboard() {
 }
 
 import { ThemeProvider } from './context/ThemeContext';
+import { WorkspaceProvider } from './context/WorkspaceContext';
 
 export default function App() {
   return (
     <ThemeProvider>
       <AuthProvider>
-        <Dashboard />
+        <WorkspaceProvider>
+          <Dashboard />
+        </WorkspaceProvider>
       </AuthProvider>
     </ThemeProvider>
   );

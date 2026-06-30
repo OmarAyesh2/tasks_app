@@ -1,24 +1,28 @@
 import { useState, useRef } from 'react';
 import type { Task } from '../types';
-import { Check, Link as LinkIcon, ExternalLink, Trash2, Library, Pencil, Loader2, Sparkles, Plus, X, Paperclip, File as FileIcon } from 'lucide-react';
+import { Check, Link as LinkIcon, ExternalLink, Trash2, Library, Pencil, Loader2, Sparkles, Plus, X, Paperclip, File as FileIcon, User as UserIcon } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
+import type { WorkspaceMember } from '../context/WorkspaceContext';
 
 interface TaskCardProps {
     task: Task;
+    members: WorkspaceMember[];
     onStatusChange: (task: Task) => void;
     onUpdateTask: (taskId: string, updates: Partial<Task>) => void;
     onEdit: () => void;
     onDelete: () => void;
 }
 
-export function TaskCard({ task, onStatusChange, onUpdateTask, onEdit, onDelete }: TaskCardProps) {
+export function TaskCard({ task, members, onStatusChange, onUpdateTask, onEdit, onDelete }: TaskCardProps) {
     const [isGenerating, setIsGenerating] = useState(false);
     const [newStepText, setNewStepText] = useState('');
     const [isUploadingAsset, setIsUploadingAsset] = useState(false);
     const [uploadProgress, setUploadProgress] = useState(0);
     const fileInputRef = useRef<HTMLInputElement>(null);
+
+    const assignee = members.find(m => m.id === task.assigned_to_member);
 
     function cn(...inputs: string[]) {
         return twMerge(clsx(inputs));
@@ -232,7 +236,7 @@ Strictly return a JSON array of sub-task objects formatted exactly like this: [{
             </div>
             <div className="flex items-start justify-between gap-4">
                 <div className="flex-1 space-y-2">
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-3 flex-wrap">
                         <button
                             type="button"
                             onClick={() => onStatusChange(task)}
@@ -251,6 +255,12 @@ Strictly return a JSON array of sub-task objects formatted exactly like this: [{
                         )}>
                             {task.name}
                         </h3>
+                        {assignee && (
+                            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-xs font-medium text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
+                                <UserIcon className="w-3 h-3" />
+                                {assignee.member_title ? `${assignee.email.split('@')[0]} (${assignee.member_title})` : assignee.email.split('@')[0]}
+                            </span>
+                        )}
                     </div>
 
                     {task.description && (

@@ -2,8 +2,10 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Modal } from './Modal';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
+import { useWorkspace } from '../context/WorkspaceContext';
 import { Plus, X, Loader2, ChevronDown, Wrench, Search } from 'lucide-react';
 import type { Link, Tool, Task, Project } from '../types';
+import type { WorkspaceMember } from '../context/WorkspaceContext';
 
 interface InlineTool {
     name: string;
@@ -15,13 +17,15 @@ interface AddTaskModalProps {
     onClose: () => void;
     onSuccess: () => void;
     tools: Tool[];
+    members: WorkspaceMember[];
     taskToEdit?: Task | null;
     projects: Project[];
     defaultProjectId?: string | null;
 }
 
-export function AddTaskModal({ isOpen, onClose, onSuccess, tools, taskToEdit, projects, defaultProjectId }: AddTaskModalProps) {
+export function AddTaskModal({ isOpen, onClose, onSuccess, tools, members, taskToEdit, projects, defaultProjectId }: AddTaskModalProps) {
     const { user } = useAuth();
+    const { activeWorkspace } = useWorkspace();
     const [loading, setLoading] = useState(false);
     const [name, setName] = useState('');
     const [description, setDescription] = useState('');
@@ -29,6 +33,7 @@ export function AddTaskModal({ isOpen, onClose, onSuccess, tools, taskToEdit, pr
     const [newLinkName, setNewLinkName] = useState('');
     const [newLinkUrl, setNewLinkUrl] = useState('');
     const [projectId, setProjectId] = useState<string | null>(defaultProjectId || null);
+    const [assignedToMember, setAssignedToMember] = useState<string | null>(null);
 
     // Tool selection state
     const [selectedToolIds, setSelectedToolIds] = useState<string[]>([]);
@@ -51,6 +56,7 @@ export function AddTaskModal({ isOpen, onClose, onSuccess, tools, taskToEdit, pr
                 setDescription(taskToEdit.description || '');
                 setLinks(taskToEdit.links || []);
                 setProjectId(taskToEdit.project_id || null);
+                setAssignedToMember(taskToEdit.assigned_to_member || null);
                 setSelectedToolIds(taskToEdit.tools?.map(t => t.id) || []);
                 setInlineTools([]);
             } else {
@@ -77,6 +83,7 @@ export function AddTaskModal({ isOpen, onClose, onSuccess, tools, taskToEdit, pr
         setLinks([]);
         setNewLinkName('');
         setNewLinkUrl('');
+        setAssignedToMember(null);
         setSelectedToolIds([]);
         setInlineTools([]);
         setToolSearch('');
@@ -127,7 +134,7 @@ export function AddTaskModal({ isOpen, onClose, onSuccess, tools, taskToEdit, pr
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!user || !supabase) return;
+        if (!user || !supabase || !activeWorkspace) return;
 
         setLoading(true);
         try {
@@ -141,7 +148,8 @@ export function AddTaskModal({ isOpen, onClose, onSuccess, tools, taskToEdit, pr
                         name,
                         description: description || null,
                         links,
-                        project_id: projectId
+                        project_id: projectId,
+                        assigned_to_member: assignedToMember
                     })
                     .eq('id', taskToEdit!.id);
 
@@ -165,7 +173,9 @@ export function AddTaskModal({ isOpen, onClose, onSuccess, tools, taskToEdit, pr
                         links,
                         user_id: user.id,
                         status: 'to_do',
-                        project_id: projectId
+                        project_id: projectId,
+                        workspace_id: activeWorkspace.id,
+                        assigned_to_member: assignedToMember
                     })
                     .select('id')
                     .single();
@@ -185,7 +195,8 @@ export function AddTaskModal({ isOpen, onClose, onSuccess, tools, taskToEdit, pr
                         link: inlineTool.link,
                         category: 'Uncategorized',
                         user_id: user.id,
-                        project_id: projectId
+                        project_id: projectId,
+                        workspace_id: activeWorkspace.id
                     })
                     .select('id')
                     .single();
@@ -245,6 +256,23 @@ export function AddTaskModal({ isOpen, onClose, onSuccess, tools, taskToEdit, pr
                         <option value="">No Project (Workspace Default)</option>
                         {projects.map(p => (
                             <option key={p.id} value={p.id}>{p.name}</option>
+                        ))}
+                    </select>
+                </div>
+
+                {/* Member Assignment */}
+                <div>
+                    <label className="block text-sm font-medium text-text-muted dark:text-slate-400 mb-1">Assign To</label>
+                    <select
+                        value={assignedToMember || ''}
+                        onChange={(e) => setAssignedToMember(e.target.value || null)}
+                        className="input-field"
+                    >
+                        <option value="">Unassigned</option>
+                        {members.map(m => (
+                            <option key={m.id} value={m.id}>
+                                {m.member_title ? `${m.email} (${m.member_title})` : m.email}
+                            </option>
                         ))}
                     </select>
                 </div>
