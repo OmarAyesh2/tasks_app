@@ -303,13 +303,13 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
 
     const { error } = await supabase
       .from('workspace_members')
-      .insert({
+      .upsert({
         workspace_id: activeWorkspace.id,
         email,
         permission_role: role,
         member_title: title || null,
-        status: 'invited' as const,
-      });
+        status: 'active' as const,
+      }, { onConflict: 'workspace_id,email' });
 
     if (error) {
       console.error('Error inviting user:', error);
@@ -329,7 +329,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
 
     const { error } = await supabase
       .from('workspace_members')
-      .update({ status: 'left', user_id: null })
+      .delete()
       .eq('workspace_id', activeWorkspace.id)
       .eq('user_id', user.id);
 

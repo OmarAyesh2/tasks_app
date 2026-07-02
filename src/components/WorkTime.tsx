@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
 import { useWorkspace } from '../context/WorkspaceContext';
 import type { WorkspaceMember } from '../context/WorkspaceContext';
@@ -19,12 +19,14 @@ const months = [
 const currentYear = new Date().getFullYear();
 const years = [currentYear - 1, currentYear, currentYear + 1];
 
-const calculateHours = (inAt: string, outAt: string | null) => {
-    if (!outAt) return null;
-    const start = new Date(inAt).getTime();
-    const end = new Date(outAt).getTime();
-    const diffHours = (end - start) / (1000 * 60 * 60);
-    return diffHours.toFixed(2);
+const formatDuration = (totalMinutes: number): string => {
+    if (!totalMinutes || isNaN(totalMinutes)) return '0m';
+    const mins = Math.round(totalMinutes);
+    if (mins < 60) return `${mins}m`;
+    const hours = Math.floor(mins / 60);
+    const remainingMins = mins % 60;
+    if (remainingMins === 0) return `${hours}h`;
+    return `${hours}h ${remainingMins}m`;
 };
 
 export function WorkTime() {
@@ -189,6 +191,56 @@ export function WorkTime() {
         }
     };
 
+    const aggregatedLogs = useMemo(() => {
+        const groups: Record<string, {
+            idKey: string;
+            dateStr: string;
+            dateObj: Date;
+            checkInAt: string;
+            checkOutAt: string | null;
+            totalMinutes: number;
+            isActive: boolean;
+        }> = {};
+
+        logs.forEach(log => {
+            const dateObj = new Date(log.check_in_at);
+            const dateKey = dateObj.toLocaleDateString();
+
+            if (!groups[dateKey]) {
+                groups[dateKey] = {
+                    idKey: dateKey,
+                    dateStr: dateObj.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }),
+                    dateObj,
+                    checkInAt: log.check_in_at,
+                    checkOutAt: log.check_out_at,
+                    totalMinutes: 0,
+                    isActive: !log.check_out_at
+                };
+            } else {
+                const group = groups[dateKey];
+                if (new Date(log.check_in_at) < new Date(group.checkInAt)) {
+                    group.checkInAt = log.check_in_at;
+                }
+                if (log.check_out_at) {
+                    if (!group.checkOutAt || new Date(log.check_out_at) > new Date(group.checkOutAt)) {
+                        group.checkOutAt = log.check_out_at;
+                    }
+                } else {
+                    group.isActive = true;
+                }
+            }
+
+            if (log.check_out_at) {
+                const start = new Date(log.check_in_at).getTime();
+                const end = new Date(log.check_out_at).getTime();
+                const diffMinutes = (end - start) / (1000 * 60);
+                groups[dateKey].totalMinutes += diffMinutes;
+            }
+        });
+
+        return Object.values(groups).sort((a, b) => b.dateObj.getTime() - a.dateObj.getTime());
+    }, [logs]);
+
     if (loading) {
         return (
             <div className="flex justify-center items-center py-12">
@@ -284,7 +336,7 @@ export function WorkTime() {
                     <div className="flex justify-center py-8">
                         <Loader2 className="w-6 h-6 animate-spin text-primary/50" />
                     </div>
-                ) : logs.length === 0 ? (
+                ) : aggregatedLogs.length === 0 ? (
                     <div className="text-center py-8 text-text-muted dark:text-slate-400">
                         No logs found for this period.
                     </div>
@@ -300,25 +352,25 @@ export function WorkTime() {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100 dark:divide-dark-border">
-                                {logs.map(log => {
-                                    const dateObj = new Date(log.check_in_at);
-                                    const dateStr = dateObj.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
-                                    const inTime = dateObj.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
-                                    const outTime = log.check_out_at ? new Date(log.check_out_at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }) : '---';
-                                    const hours = calculateHours(log.check_in_at, log.check_out_at);
+                                {aggregatedLogs.map(log => {
+                                    const inTime = new Date(log.checkInAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+                                    const outTime = log.checkOutAt ? new Date(log.checkOutAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }) : '---';
 
                                     return (
-                                        <tr key={log.id} className="text-text-main dark:text-slate-100 group hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
-                                            <td className="py-3">{dateStr}</td>
+                                        <tr key={log.idKey} className="text-text-main dark:text-slate-100 group hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
+                                            <td className="py-3">{log.dateStr}</td>
                                             <td className="py-3">{inTime}</td>
                                             <td className="py-3">{outTime}</td>
                                             <td className="py-3 text-right">
-                                                {hours ? (
-                                                    <span className="font-medium">{hours} hrs</span>
+                                                {log.isActive ? (
+                                                    <div className="flex items-center justify-end gap-2">
+                                                        {log.totalMinutes > 0 && <span className="font-medium">{formatDuration(log.totalMinutes)}</span>}
+                                                        <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold bg-primary/10 text-primary uppercase tracking-wide">
+                                                            In Progress
+                                                        </span>
+                                                    </div>
                                                 ) : (
-                                                    <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold bg-primary/10 text-primary uppercase tracking-wide">
-                                                        In Progress
-                                                    </span>
+                                                    <span className="font-medium">{formatDuration(log.totalMinutes)}</span>
                                                 )}
                                             </td>
                                         </tr>
