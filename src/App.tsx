@@ -40,10 +40,24 @@ function Dashboard() {
 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
+  const fetchTools = async () => {
+    if (!user) return;
+    try {
+      const { data: toolsData } = await supabase!
+        .from('tools')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+
+      if (toolsData) setTools(toolsData as Tool[]);
+    } catch (error) {
+      console.error('Error fetching tools:', error);
+    }
+  };
+
   const fetchData = async () => {
     if (!activeWorkspace) {
       setTasks([]);
-      setTools([]);
       setProjects([]);
       setMembers([]);
       setIsInitialLoad(false);
@@ -79,12 +93,7 @@ function Dashboard() {
         setTasks(enriched as Task[]);
       }
 
-      // Fetch tools
-      const { data: toolsData } = await supabase!
-        .from('tools')
-        .select('*')
-        .eq('workspace_id', activeWorkspace.id)
-        .order('created_at', { ascending: false });
+      // Tools are fetched separately (account-wide)
 
       // Fetch projects
       const { data: projectsData } = await supabase!
@@ -100,7 +109,7 @@ function Dashboard() {
         .eq('workspace_id', activeWorkspace.id)
         .eq('status', 'active');
 
-      if (toolsData) setTools(toolsData as Tool[]);
+
       if (projectsData) setProjects(projectsData as Project[]);
       if (membersData) setMembers(membersData as WorkspaceMember[]);
     } catch (error) {
@@ -109,6 +118,12 @@ function Dashboard() {
       setIsInitialLoad(false);
     }
   };
+
+  useEffect(() => {
+    if (user) {
+      fetchTools();
+    }
+  }, [user]);
 
   useEffect(() => {
     if (user) {
@@ -249,7 +264,6 @@ function Dashboard() {
   });
 
   const filteredTools = tools.filter(t => {
-    if (currentProjectId && t.project_id !== currentProjectId) return false;
     return selectedCategory === 'All' ? true : t.category === selectedCategory;
   });
 
@@ -453,10 +467,8 @@ function Dashboard() {
             setIsToolModalOpen(false);
             setToolToEdit(null);
           }}
-          onSuccess={fetchData}
+          onSuccess={fetchTools}
           toolToEdit={toolToEdit}
-          projects={projects}
-          defaultProjectId={currentProjectId}
         />
 
         <AddProjectModal

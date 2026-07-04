@@ -194,9 +194,7 @@ export function AddTaskModal({ isOpen, onClose, onSuccess, tools, members, taskT
                         name: inlineTool.name,
                         link: inlineTool.link,
                         category: 'Uncategorized',
-                        user_id: user.id,
-                        project_id: projectId,
-                        workspace_id: activeWorkspace.id
+                        user_id: user.id
                     })
                     .select('id')
                     .single();

@@ -2,28 +2,23 @@ import React, { useState, useEffect } from 'react';
 import { Modal } from './Modal';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
-import { useWorkspace } from '../context/WorkspaceContext';
 import { Loader2 } from 'lucide-react';
-import type { Tool, Project } from '../types';
+import type { Tool } from '../types';
 
 interface AddToolModalProps {
     isOpen: boolean;
     onClose: () => void;
     onSuccess: () => void;
     toolToEdit?: Tool | null;
-    projects: Project[];
-    defaultProjectId?: string | null;
 }
 
-export function AddToolModal({ isOpen, onClose, onSuccess, toolToEdit, projects, defaultProjectId }: AddToolModalProps) {
+export function AddToolModal({ isOpen, onClose, onSuccess, toolToEdit }: AddToolModalProps) {
     const { user } = useAuth();
-    const { activeWorkspace } = useWorkspace();
     const [loading, setLoading] = useState(false);
     const [name, setName] = useState('');
     const [description, setDescription] = useState('');
     const [link, setLink] = useState('');
     const [category, setCategory] = useState('');
-    const [projectId, setProjectId] = useState<string | null>(defaultProjectId || null);
 
     const resetForm = () => {
         setName('');
@@ -39,17 +34,15 @@ export function AddToolModal({ isOpen, onClose, onSuccess, toolToEdit, projects,
                 setDescription(toolToEdit.description || '');
                 setLink(toolToEdit.link);
                 setCategory(toolToEdit.category || '');
-                setProjectId(toolToEdit.project_id || null);
             } else {
                 resetForm();
-                setProjectId(defaultProjectId || null);
             }
         }
     }, [isOpen, toolToEdit]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!user || !supabase || !activeWorkspace) return;
+        if (!user || !supabase) return;
 
         setLoading(true);
         try {
@@ -58,8 +51,7 @@ export function AddToolModal({ isOpen, onClose, onSuccess, toolToEdit, projects,
                     name,
                     description: description || null,
                     link,
-                    category: category || null,
-                    project_id: projectId
+                    category: category || null
                 }).eq('id', toolToEdit.id);
 
                 if (error) throw error;
@@ -69,9 +61,7 @@ export function AddToolModal({ isOpen, onClose, onSuccess, toolToEdit, projects,
                     description: description || null,
                     link,
                     category: category || null,
-                    user_id: user.id,
-                    project_id: projectId,
-                    workspace_id: activeWorkspace.id
+                    user_id: user.id
                 });
 
                 if (error) throw error;
@@ -102,20 +92,7 @@ export function AddToolModal({ isOpen, onClose, onSuccess, toolToEdit, projects,
                     />
                 </div>
 
-                {/* Project Assignment */}
-                <div>
-                    <label className="block text-sm font-medium text-text-muted mb-1">Project Assignment</label>
-                    <select
-                        value={projectId || ''}
-                        onChange={(e) => setProjectId(e.target.value || null)}
-                        className="input-field"
-                    >
-                        <option value="">No Project (Workspace Default)</option>
-                        {projects.map(p => (
-                            <option key={p.id} value={p.id}>{p.name}</option>
-                        ))}
-                    </select>
-                </div>
+
 
                 <div>
                     <label className="block text-sm font-medium text-text-muted mb-1">Category</label>
