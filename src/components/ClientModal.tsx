@@ -3,8 +3,16 @@ import { Modal } from './Modal';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import { useWorkspace } from '../context/WorkspaceContext';
-import { Loader2, Instagram, Facebook, Globe } from 'lucide-react';
+import { Loader2, Instagram, Facebook, Globe, MapPin } from 'lucide-react';
 import type { Client, ClientStatus } from '../types';
+
+function SnapchatIcon({ className }: { className?: string }) {
+    return (
+        <svg className={className} viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12.12 1.34c-1.3-.08-2.61.16-3.83.65a8.77 8.77 0 0 0-3.23 2.5 8.1 8.1 0 0 0-1.78 4.34c-.11.83-.08 1.68.08 2.5.07.4.2.78.38 1.15.2.4.4.8.44 1.25.04.41-.05.82-.24 1.19-.24.47-.6.87-1.04 1.18-.32.22-.68.37-1.06.45-.4.07-.8.07-1.2 0-.25-.03-.5-.09-.72-.18a2.53 2.53 0 0 0-1.12.33 1.5 1.5 0 0 0-.61 1.05c-.06.32-.03.65.1.95.14.3.36.56.64.74.45.28.98.43 1.51.42 1.05 0 2.05-.33 2.89-.92.8-.54 1.4-1.3 1.74-2.2a4.4 4.4 0 0 1 1.72-2.12c.57-.36 1.25-.52 1.93-.45.4.03.8.12 1.17.26a4.4 4.4 0 0 0 2.87 0 5.42 5.42 0 0 0 1.17-.26c.68-.07 1.36.09 1.93.45a4.4 4.4 0 0 1 1.72 2.12c.34.9.94 1.66 1.74 2.2.84.59 1.84.92 2.89.92.53.01 1.06-.14 1.51-.42.28-.18.5-.44.64-.74.13-.3.16-.63.1-.95a1.5 1.5 0 0 0-.61-1.05 2.53 2.53 0 0 0-1.12-.33c-.22-.09-.47-.15-.72-.18-.4-.07-.8-.07-1.2 0-.38.08-.74.23-1.06.45-.44.31-.8.71-1.04 1.18-.19.37-.28.78-.24 1.19.04.45.24.85.44 1.25.18.37.31.75.38 1.15.16.82.19 1.67.08 2.5a8.1 8.1 0 0 0-1.78 4.34 8.77 8.77 0 0 0-3.23-2.5 8.35 8.35 0 0 0-3.83-.65z" />
+        </svg>
+    );
+}
 
 // Inline SVG icons for TikTok and LinkedIn (lucide-react doesn't have them)
 function TikTokIcon({ className }: { className?: string }) {
@@ -47,10 +55,13 @@ export function ClientModal({ isOpen, onClose, onSuccess, clientToEdit }: Client
     const [phone, setPhone] = useState('');
     const [email, setEmail] = useState('');
     const [website, setWebsite] = useState('');
+    const [notes, setNotes] = useState('');
     const [instagram, setInstagram] = useState('');
     const [facebook, setFacebook] = useState('');
     const [tiktok, setTiktok] = useState('');
     const [linkedin, setLinkedin] = useState('');
+    const [maps, setMaps] = useState('');
+    const [snapchat, setSnapchat] = useState('');
 
     const resetForm = () => {
         setName('');
@@ -58,10 +69,13 @@ export function ClientModal({ isOpen, onClose, onSuccess, clientToEdit }: Client
         setPhone('');
         setEmail('');
         setWebsite('');
+        setNotes('');
         setInstagram('');
         setFacebook('');
         setTiktok('');
         setLinkedin('');
+        setMaps('');
+        setSnapchat('');
     };
 
     useEffect(() => {
@@ -72,10 +86,13 @@ export function ClientModal({ isOpen, onClose, onSuccess, clientToEdit }: Client
                 setPhone(clientToEdit.phone || '');
                 setEmail(clientToEdit.email || '');
                 setWebsite(clientToEdit.website || '');
+                setNotes(clientToEdit.notes || '');
                 setInstagram(clientToEdit.social_links?.instagram || '');
                 setFacebook(clientToEdit.social_links?.facebook || '');
                 setTiktok(clientToEdit.social_links?.tiktok || '');
                 setLinkedin(clientToEdit.social_links?.linkedin || '');
+                setMaps(clientToEdit.social_links?.maps || '');
+                setSnapchat(clientToEdit.social_links?.snapchat || '');
             } else {
                 resetForm();
             }
@@ -93,6 +110,8 @@ export function ClientModal({ isOpen, onClose, onSuccess, clientToEdit }: Client
             ...(facebook && { facebook }),
             ...(tiktok && { tiktok }),
             ...(linkedin && { linkedin }),
+            ...(maps && { maps }),
+            ...(snapchat && { snapchat }),
         };
 
         const payload = {
@@ -101,6 +120,7 @@ export function ClientModal({ isOpen, onClose, onSuccess, clientToEdit }: Client
             phone: phone || null,
             email: email || null,
             website: website || null,
+            notes: notes || null,
             social_links: Object.keys(socialLinks).length > 0 ? socialLinks : {},
         };
 
@@ -269,7 +289,44 @@ export function ClientModal({ isOpen, onClose, onSuccess, clientToEdit }: Client
                                 placeholder="https://linkedin.com/company/..."
                             />
                         </div>
+
+                        <div className="relative">
+                            <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-red-500">
+                                <MapPin className="w-4 h-4" />
+                            </div>
+                            <input
+                                type="text"
+                                value={maps}
+                                onChange={(e) => setMaps(e.target.value)}
+                                className="input-field pl-9"
+                                placeholder="https://maps.google.com/..."
+                            />
+                        </div>
+
+                        <div className="relative">
+                            <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-yellow-400">
+                                <SnapchatIcon className="w-4 h-4" />
+                            </div>
+                            <input
+                                type="text"
+                                value={snapchat}
+                                onChange={(e) => setSnapchat(e.target.value)}
+                                className="input-field pl-9"
+                                placeholder="https://snapchat.com/add/..."
+                            />
+                        </div>
                     </div>
+                </div>
+
+                {/* Notes */}
+                <div className="pt-2">
+                    <label className="block text-sm font-medium text-text-muted mb-1">Client Notes</label>
+                    <textarea
+                        value={notes}
+                        onChange={(e) => setNotes(e.target.value)}
+                        className="input-field min-h-[100px] resize-y"
+                        placeholder="Add important details, context, or meeting notes here..."
+                    />
                 </div>
 
                 {/* Actions */}

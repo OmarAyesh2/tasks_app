@@ -71,6 +71,8 @@ export type ClientSocialLinks = {
     facebook?: string;
     tiktok?: string;
     linkedin?: string;
+    maps?: string;
+    snapchat?: string;
 };
 
 export type Client = {
@@ -83,5 +85,6 @@ export type Client = {
     phone: string | null;
     email: string | null;
     website: string | null;
+    notes: string | null;
     social_links: ClientSocialLinks | null;
 };

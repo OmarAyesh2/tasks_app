@@ -1,5 +1,13 @@
 import type { Client } from '../types';
-import { Mail, Phone, Globe, Pencil, Trash2, Instagram, Facebook } from 'lucide-react';
+import { Mail, Phone, Globe, Pencil, Trash2, Instagram, Facebook, MapPin } from 'lucide-react';
+
+function SnapchatIcon({ className }: { className?: string }) {
+    return (
+        <svg className={className} viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12.12 1.34c-1.3-.08-2.61.16-3.83.65a8.77 8.77 0 0 0-3.23 2.5 8.1 8.1 0 0 0-1.78 4.34c-.11.83-.08 1.68.08 2.5.07.4.2.78.38 1.15.2.4.4.8.44 1.25.04.41-.05.82-.24 1.19-.24.47-.6.87-1.04 1.18-.32.22-.68.37-1.06.45-.4.07-.8.07-1.2 0-.25-.03-.5-.09-.72-.18a2.53 2.53 0 0 0-1.12.33 1.5 1.5 0 0 0-.61 1.05c-.06.32-.03.65.1.95.14.3.36.56.64.74.45.28.98.43 1.51.42 1.05 0 2.05-.33 2.89-.92.8-.54 1.4-1.3 1.74-2.2a4.4 4.4 0 0 1 1.72-2.12c.57-.36 1.25-.52 1.93-.45.4.03.8.12 1.17.26a4.4 4.4 0 0 0 2.87 0 5.42 5.42 0 0 0 1.17-.26c.68-.07 1.36.09 1.93.45a4.4 4.4 0 0 1 1.72 2.12c.34.9.94 1.66 1.74 2.2.84.59 1.84.92 2.89.92.53.01 1.06-.14 1.51-.42.28-.18.5-.44.64-.74.13-.3.16-.63.1-.95a1.5 1.5 0 0 0-.61-1.05 2.53 2.53 0 0 0-1.12-.33c-.22-.09-.47-.15-.72-.18-.4-.07-.8-.07-1.2 0-.38.08-.74.23-1.06.45-.44.31-.8.71-1.04 1.18-.19.37-.28.78-.24 1.19.04.45.24.85.44 1.25.18.37.31.75.38 1.15.16.82.19 1.67.08 2.5a8.1 8.1 0 0 0-1.78 4.34 8.77 8.77 0 0 0-3.23-2.5 8.35 8.35 0 0 0-3.83-.65z" />
+        </svg>
+    );
+}
 
 // Lucide doesn't include TikTok/LinkedIn as named exports — use inline SVGs
 function TikTokIcon({ className }: { className?: string }) {
@@ -75,6 +83,16 @@ export function ClientCard({ client, onEdit, onDelete }: ClientCardProps) {
             icon: <LinkedInIcon className="w-4 h-4" />,
             url: social.linkedin,
         },
+        {
+            key: 'maps',
+            icon: <MapPin className="w-4 h-4" />,
+            url: social.maps,
+        },
+        {
+            key: 'snapchat',
+            icon: <SnapchatIcon className="w-4 h-4" />,
+            url: social.snapchat,
+        },
     ];
 
     return (
@@ -136,8 +154,17 @@ export function ClientCard({ client, onEdit, onDelete }: ClientCardProps) {
                 )}
             </div>
 
+            {/* Notes Section */}
+            {client.notes && (
+                <div className="mb-4 pt-4 border-t border-slate-100 dark:border-dark-border/50">
+                    <p className="text-sm text-text-muted dark:text-slate-400 whitespace-pre-wrap leading-relaxed line-clamp-4 hover:line-clamp-none transition-all">
+                        {client.notes}
+                    </p>
+                </div>
+            )}
+
             {/* Social Links Row */}
-            <div className="flex items-center gap-1.5 pt-3 border-t border-slate-100 dark:border-dark-border/50">
+            <div className={`flex items-center gap-1.5 pt-3 ${!client.notes ? 'border-t border-slate-100 dark:border-dark-border/50' : ''}`}>
                 {socialLinks.map(({ key, icon, url }) =>
                     url ? (
                         <a
