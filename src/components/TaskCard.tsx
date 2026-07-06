@@ -1,21 +1,25 @@
 import { useState, useRef } from 'react';
-import type { Task } from '../types';
+import type { Task, Project } from '../types';
 import { Check, Link as LinkIcon, ExternalLink, Trash2, Library, Pencil, Loader2, Sparkles, Plus, X, Paperclip, File as FileIcon, User as UserIcon } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
-import type { WorkspaceMember } from '../context/WorkspaceContext';
+import { useWorkspace, type WorkspaceMember } from '../context/WorkspaceContext';
+import { useAuth } from '../context/AuthContext';
 
 interface TaskCardProps {
     task: Task;
     members: WorkspaceMember[];
+    projects: Project[];
     onStatusChange: (task: Task) => void;
     onUpdateTask: (taskId: string, updates: Partial<Task>) => void;
     onEdit: () => void;
     onDelete: () => void;
 }
 
-export function TaskCard({ task, members, onStatusChange, onUpdateTask, onEdit, onDelete }: TaskCardProps) {
+export function TaskCard({ task, members, projects, onStatusChange, onUpdateTask, onEdit, onDelete }: TaskCardProps) {
+    const { activeWorkspace } = useWorkspace();
+    const { user } = useAuth();
     const [isGenerating, setIsGenerating] = useState(false);
     const [newStepText, setNewStepText] = useState('');
     const [isUploadingAsset, setIsUploadingAsset] = useState(false);
@@ -128,8 +132,20 @@ Strictly return a JSON array of sub-task objects formatted exactly like this: [{
 
                 xhr.setRequestHeader('Authorization', `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`);
                 xhr.setRequestHeader('apikey', import.meta.env.VITE_SUPABASE_ANON_KEY);
-                xhr.setRequestHeader('x-filename', encodeURIComponent(file.name));
-                xhr.setRequestHeader('x-filetype', file.type || 'application/octet-stream');
+                // Create FormData payload
+                const formData = new FormData();
+                formData.append('file', file);
+                
+                const workspaceName = activeWorkspace?.name || 'Default Workspace';
+                const userEmail = user?.email || 'Unknown User';
+                const project = projects.find(p => p.id === task.project_id);
+                const projectName = project ? project.name : 'No Project';
+
+                formData.append('workspaceName', workspaceName);
+                formData.append('userEmail', userEmail);
+                formData.append('projectName', projectName);
+                formData.append('taskId', task.id);
+                formData.append('taskName', task.name);
 
                 xhr.upload.onprogress = (event) => {
                     if (event.lengthComputable) {
@@ -150,12 +166,18 @@ Strictly return a JSON array of sub-task objects formatted exactly like this: [{
                             reject(new Error("Failed to parse response"));
                         }
                     } else {
+                        try {
+                            const parsedError = JSON.parse(xhr.responseText);
+                            console.error("CRITICAL BACKEND ERROR DETAILS:", parsedError);
+                        } catch {
+                            console.error("Raw Server Error Response:", xhr.responseText);
+                        }
                         reject(new Error(`Upload failed with status: ${xhr.status}`));
                     }
                 };
 
                 xhr.onerror = () => reject(new Error("Network error during upload"));
-                xhr.send(file);
+                xhr.send(formData);
             });
 
             const { data: assetData, error } = await supabase
@@ -193,11 +215,29 @@ Strictly return a JSON array of sub-task objects formatted exactly like this: [{
 
         try {
             if (!supabase) return;
+            
+            const currentAssets = task.assets || [];
+            const attachment = currentAssets.find((item) => item.id === assetId);
+            
+            if (attachment && attachment.public_url) {
+                const googleDriveFileId = attachment.public_url.match(/\/file\/d\/([^/]+)/)?.[1];
+                if (googleDriveFileId) {
+                    const { error: invokeError } = await supabase.functions.invoke('upload-to-drive', {
+                        method: 'DELETE',
+                        body: { fileId: googleDriveFileId }
+                    });
+
+                    if (invokeError) {
+                        console.error("Edge function deletion error:", invokeError);
+                        return;
+                    }
+                }
+            }
+
             const { error } = await supabase.from('task_assets').delete().eq('id', assetId);
 
             if (error) throw error;
 
-            const currentAssets = task.assets || [];
             const updatedAssets = currentAssets.filter((item) => item.id !== assetId);
             onUpdateTask(task.id, { assets: updatedAssets });
         } catch (error) {

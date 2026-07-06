@@ -6,36 +6,41 @@ import { Auth } from './components/Auth';
 import { Sidebar } from './components/Sidebar';
 import { TaskCard } from './components/TaskCard';
 import { ToolCard } from './components/ToolCard';
+import { ClientCard } from './components/ClientCard';
 import { AddTaskModal } from './components/AddTaskModal';
 import { AddToolModal } from './components/AddToolModal';
 import { AddProjectModal } from './components/AddProjectModal';
+import { ClientModal } from './components/ClientModal';
 import { ConfirmModal } from './components/ConfirmModal';
 import { MemberManagement } from './components/MemberManagement';
 import { WorkTime } from './components/WorkTime';
 import { Plus, Loader2, Menu } from 'lucide-react';
 import { supabase } from './lib/supabase';
-import type { Task, Tool, Project } from './types';
+import type { Task, Tool, Project, Client } from './types';
 
 function Dashboard() {
   if (!supabase) return null;
 
   const { user, loading: authLoading } = useAuth();
   const { activeWorkspace, currentMemberProfile, loading: workspaceLoading } = useWorkspace();
-  const [currentView, setCurrentView] = useState<'tasks' | 'completed' | 'tools' | 'members' | 'work_time'>('tasks');
+  const [currentView, setCurrentView] = useState<'tasks' | 'completed' | 'tools' | 'members' | 'work_time' | 'clients'>('tasks');
   const [selectedMemberFilter, setSelectedMemberFilter] = useState<string>('all');
 
   const [tasks, setTasks] = useState<Task[]>([]);
   const [tools, setTools] = useState<Tool[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [members, setMembers] = useState<WorkspaceMember[]>([]);
+  const [clients, setClients] = useState<Client[]>([]);
   const [currentProjectId, setCurrentProjectId] = useState<string | null>(null);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
 
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [isToolModalOpen, setIsToolModalOpen] = useState(false);
   const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
+  const [isClientModalOpen, setIsClientModalOpen] = useState(false);
   const [toolToEdit, setToolToEdit] = useState<Tool | null>(null);
   const [taskToEdit, setTaskToEdit] = useState<Task | null>(null);
+  const [clientToEdit, setClientToEdit] = useState<Client | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -55,11 +60,31 @@ function Dashboard() {
     }
   };
 
+  const fetchClients = async () => {
+    if (!activeWorkspace) {
+      setClients([]);
+      return;
+    }
+
+    try {
+      const { data } = await supabase!
+        .from('clients')
+        .select('*')
+        .eq('workspace_id', activeWorkspace.id)
+        .order('created_at', { ascending: false });
+
+      if (data) setClients(data as Client[]);
+    } catch (error) {
+      console.error('Error fetching clients:', error);
+    }
+  };
+
   const fetchData = async () => {
     if (!activeWorkspace) {
       setTasks([]);
       setProjects([]);
       setMembers([]);
+      setClients([]);
       setIsInitialLoad(false);
       return;
     }
@@ -112,6 +137,11 @@ function Dashboard() {
 
       if (projectsData) setProjects(projectsData as Project[]);
       if (membersData) setMembers(membersData as WorkspaceMember[]);
+
+      // Fetch clients (only if feature flag is on)
+      if (activeWorkspace.enable_client_tracker) {
+        await fetchClients();
+      }
     } catch (error) {
       console.error('Error fetching data:', error);
     } finally {
@@ -131,6 +161,13 @@ function Dashboard() {
     }
   }, [user, activeWorkspace?.id]);
 
+  // Guard: if client tracker is disabled, redirect away from clients view
+  useEffect(() => {
+    if (currentView === 'clients' && !activeWorkspace?.enable_client_tracker) {
+      setCurrentView('tasks');
+    }
+  }, [currentView, activeWorkspace?.enable_client_tracker]);
+
   const handleTaskStatusChange = async (task: Task) => {
     handleTaskUpdate(task.id, { status: task.status === 'to_do' ? 'done' : 'to_do' });
   };
@@ -141,9 +178,16 @@ function Dashboard() {
       t.id === taskId ? { ...t, ...updates } : t
     ));
 
+    // Strip virtual properties that don't belong in the tasks table
+    const dbUpdates = { ...updates };
+    delete dbUpdates.assets;
+
+    // If there's nothing left to update in the DB, return early
+    if (Object.keys(dbUpdates).length === 0) return;
+
     const { error } = await supabase!
       .from('tasks')
-      .update(updates)
+      .update(dbUpdates)
       .eq('id', taskId);
 
     if (error) {
@@ -308,6 +352,7 @@ function Dashboard() {
                    : currentView === 'completed' ? 'Completed Tasks' 
                    : currentView === 'members' ? 'Members' 
                    : currentView === 'work_time' ? 'Work Time'
+                   : currentView === 'clients' ? 'Clients'
                    : 'Resources'}
                 </h1>
                 {currentProjectName && (
@@ -325,7 +370,9 @@ function Dashboard() {
                       ? 'Manage your workspace team'
                       : currentView === 'work_time'
                         ? 'Track your daily work hours'
-                        : 'Your collection of useful resources'}
+                        : currentView === 'clients'
+                          ? 'Manage your workspace leads and active relationships'
+                          : 'Your collection of useful resources'}
               </p>
             </div>
           </div>
@@ -336,6 +383,9 @@ function Dashboard() {
                 if (currentView === 'tools') {
                   setToolToEdit(null);
                   setIsToolModalOpen(true);
+                } else if (currentView === 'clients') {
+                  setClientToEdit(null);
+                  setIsClientModalOpen(true);
                 } else {
                   setTaskToEdit(null);
                   setIsTaskModalOpen(true);
@@ -344,7 +394,7 @@ function Dashboard() {
               className="btn-primary flex items-center gap-2 shadow-lg hover:shadow-primary/20 w-full md:w-auto justify-center"
             >
               <Plus className="w-5 h-5" />
-              Add {currentView === 'tools' ? 'Resource' : 'Task'}
+              Add {currentView === 'tools' ? 'Resource' : currentView === 'clients' ? 'Client' : 'Task'}
             </button>
           )}
         </header>
@@ -359,6 +409,38 @@ function Dashboard() {
               <MemberManagement />
             ) : currentView === 'work_time' ? (
               <WorkTime />
+            ) : currentView === 'clients' ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {clients.length === 0 ? (
+                  <div className="col-span-full text-center py-12 bg-white/50 dark:bg-dark-surface/50 rounded-2xl border border-dashed border-slate-300 dark:border-dark-border">
+                    <p className="text-text-muted dark:text-slate-400">No clients yet. Add your first client to get started.</p>
+                  </div>
+                ) : (
+                  clients.map(client => (
+                    <ClientCard
+                      key={client.id}
+                      client={client}
+                      onEdit={() => {
+                        setClientToEdit(client);
+                        setIsClientModalOpen(true);
+                      }}
+                      onDelete={async () => {
+                        if (!window.confirm('Are you sure you want to delete this client?')) return;
+                        // Optimistic removal
+                        setClients(prev => prev.filter(c => c.id !== client.id));
+                        const { error } = await supabase!
+                          .from('clients')
+                          .delete()
+                          .eq('id', client.id);
+                        if (error) {
+                          console.error('Error deleting client:', error);
+                          fetchClients(); // Revert on failure
+                        }
+                      }}
+                    />
+                  ))
+                )}
+              </div>
             ) : currentView === 'tools' ? (
               <div className="space-y-6">
                 {/* Category Filters */}
@@ -431,6 +513,7 @@ function Dashboard() {
                       key={task.id}
                       task={task}
                       members={members}
+                      projects={projects}
                       onStatusChange={handleTaskStatusChange}
                       onUpdateTask={handleTaskUpdate}
                       onEdit={() => {
@@ -475,6 +558,16 @@ function Dashboard() {
           isOpen={isProjectModalOpen}
           onClose={() => setIsProjectModalOpen(false)}
           onSuccess={fetchData}
+        />
+
+        <ClientModal
+          isOpen={isClientModalOpen}
+          onClose={() => {
+            setIsClientModalOpen(false);
+            setClientToEdit(null);
+          }}
+          onSuccess={fetchClients}
+          clientToEdit={clientToEdit}
         />
 
         <ConfirmModal

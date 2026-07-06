@@ -12,6 +12,7 @@ export interface Workspace {
   name: string;
   created_at: string;
   time_tracking_enabled?: boolean;
+  enable_client_tracker?: boolean;
 }
 
 export interface WorkspaceMember {
@@ -75,7 +76,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
 
     const { data, error } = await supabase
       .from('workspace_members')
-      .select('workspace_id, workspaces ( id, name, created_at, time_tracking_enabled )')
+      .select('workspace_id, workspaces ( id, name, created_at, time_tracking_enabled, enable_client_tracker )')
       .eq('user_id', user.id)
       .eq('status', 'active');
 

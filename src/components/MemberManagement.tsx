@@ -12,6 +12,7 @@ import {
     CheckCircle2,
     Clock,
     LogOut,
+    ContactRound,
 } from 'lucide-react';
 import type { WorkspaceMember, WorkspaceRole } from '../context/WorkspaceContext';
 
@@ -50,6 +51,7 @@ export function MemberManagement() {
     // Time tracking toggle
     // ---------------------------------------------------------------
     const [updatingTracking, setUpdatingTracking] = useState(false);
+    const [updatingClientTracker, setUpdatingClientTracker] = useState(false);
 
     const handleToggleTimeTracking = async () => {
         if (!activeWorkspace) return;
@@ -220,6 +222,62 @@ export function MemberManagement() {
                             aria-hidden="true"
                             className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
                                 activeWorkspace.time_tracking_enabled ? 'translate-x-5' : 'translate-x-0'
+                            }`}
+                        />
+                    </button>
+                </div>
+            )}
+
+            {/* Client Tracker Toggle — owners only */}
+            {isOwner && (
+                <div className="card-base p-6 flex items-center justify-between">
+                    <div>
+                        <div className="flex items-center gap-2 mb-1">
+                            <ContactRound className="w-5 h-5 text-primary" />
+                            <h2 className="text-lg font-semibold text-text-main dark:text-slate-100">
+                                Enable Client Tracker
+                            </h2>
+                        </div>
+                        <p className="text-sm text-text-muted dark:text-slate-400">
+                            Track leads, negotiations, and active client relationships.
+                        </p>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={async () => {
+                            if (!activeWorkspace) return;
+                            setUpdatingClientTracker(true);
+                            const newState = !activeWorkspace.enable_client_tracker;
+                            try {
+                                const { data, error } = await supabase!
+                                    .from('workspaces')
+                                    .update({ enable_client_tracker: newState })
+                                    .eq('id', activeWorkspace.id)
+                                    .select();
+                                if (error) throw error;
+                                if (data && data[0]) {
+                                    setActiveWorkspace(data[0] as typeof activeWorkspace);
+                                } else {
+                                    await refreshWorkspaces();
+                                }
+                            } catch (error) {
+                                console.error('Error toggling client tracker:', error);
+                                alert('Failed to update client tracker setting.');
+                            } finally {
+                                setUpdatingClientTracker(false);
+                            }
+                        }}
+                        disabled={updatingClientTracker}
+                        className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary/50 focus:ring-offset-2 ${
+                            activeWorkspace.enable_client_tracker ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-600'
+                        } ${updatingClientTracker ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        role="switch"
+                        aria-checked={!!activeWorkspace.enable_client_tracker}
+                    >
+                        <span
+                            aria-hidden="true"
+                            className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                                activeWorkspace.enable_client_tracker ? 'translate-x-5' : 'translate-x-0'
                             }`}
                         />
                     </button>

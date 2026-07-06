@@ -1,4 +1,4 @@
-import { LayoutList, CheckSquare, Library, LogOut, Sun, Moon, X, Plus, Folder, Trash2, Users, Clock } from 'lucide-react';
+import { LayoutList, CheckSquare, Library, LogOut, Sun, Moon, X, Plus, Folder, Trash2, Users, Clock, ContactRound } from 'lucide-react';
 import type { Project } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
@@ -7,7 +7,7 @@ import { WorkspaceSelector } from './WorkspaceSelector';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
-type View = 'tasks' | 'completed' | 'tools' | 'members' | 'work_time';
+type View = 'tasks' | 'completed' | 'tools' | 'members' | 'work_time' | 'clients';
 
 interface SidebarProps {
     currentView: View;
@@ -35,6 +35,9 @@ export function Sidebar({ currentView, onViewChange, isOpen, onClose, projects, 
         { id: 'members', label: 'Members', icon: Users },
         ...(activeWorkspace?.time_tracking_enabled && currentMemberProfile?.permission_role !== 'viewer' 
             ? [{ id: 'work_time' as View, label: 'Work Time', icon: Clock }] 
+            : []),
+        ...(activeWorkspace?.enable_client_tracker
+            ? [{ id: 'clients' as View, label: 'Clients', icon: ContactRound }]
             : [])
     ];
 

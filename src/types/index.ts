@@ -63,3 +63,25 @@ export type TaskTool = {
     task_id: string;
     tool_id: string;
 };
+
+export type ClientStatus = 'potential' | 'negotiating' | 'active';
+
+export type ClientSocialLinks = {
+    instagram?: string;
+    facebook?: string;
+    tiktok?: string;
+    linkedin?: string;
+};
+
+export type Client = {
+    id: string;
+    created_at: string;
+    workspace_id: string;
+    user_id: string;
+    name: string;
+    status: ClientStatus;
+    phone: string | null;
+    email: string | null;
+    website: string | null;
+    social_links: ClientSocialLinks | null;
+};
