@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { useWorkspace } from './context/WorkspaceContext';
 import type { WorkspaceMember } from './context/WorkspaceContext';
@@ -222,7 +222,7 @@ function Dashboard() {
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      supabase?.removeChannel(channel);
       if (debounceRef_rt.current) clearTimeout(debounceRef_rt.current);
     };
   }, [activeWorkspace?.id, user]);
