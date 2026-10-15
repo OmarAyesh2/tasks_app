@@ -48,6 +48,18 @@ export type Task = {
     sort_order?: number;
     tools?: Tool[];
     assets?: TaskAsset[];
+    client_id?: string | null;
+    client?: { id: string; name: string } | null;
+};
+
+export type TaskComment = {
+    id: string;
+    task_id: string;
+    workspace_id: string;
+    user_id: string;
+    author_email: string;
+    content: string;
+    created_at: string;
 };
 
 export type Tool = {

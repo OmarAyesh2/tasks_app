@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import { useWorkspace } from '../context/WorkspaceContext';
 import { Plus, X, Loader2, ChevronDown, Wrench, Search } from 'lucide-react';
-import type { Link, Tool, Task, Project } from '../types';
+import type { Link, Tool, Task, Project, Client } from '../types';
 import type { WorkspaceMember } from '../context/WorkspaceContext';
 
 interface InlineTool {
@@ -21,9 +21,10 @@ interface AddTaskModalProps {
     taskToEdit?: Task | null;
     projects: Project[];
     defaultProjectId?: string | null;
+    clients?: Client[];
 }
 
-export function AddTaskModal({ isOpen, onClose, onSuccess, tools, members, taskToEdit, projects, defaultProjectId }: AddTaskModalProps) {
+export function AddTaskModal({ isOpen, onClose, onSuccess, tools, members, taskToEdit, projects, defaultProjectId, clients }: AddTaskModalProps) {
     const { user } = useAuth();
     const { activeWorkspace } = useWorkspace();
     const [loading, setLoading] = useState(false);
@@ -36,6 +37,7 @@ export function AddTaskModal({ isOpen, onClose, onSuccess, tools, members, taskT
     const [assignedToMember, setAssignedToMember] = useState<string | null>(null);
     const [dueDate, setDueDate] = useState('');
     const [priority, setPriority] = useState<'high' | 'medium' | 'low' | null>(null);
+    const [clientId, setClientId] = useState<string | null>(null);
 
     // Tool selection state
     const [selectedToolIds, setSelectedToolIds] = useState<string[]>([]);
@@ -61,6 +63,7 @@ export function AddTaskModal({ isOpen, onClose, onSuccess, tools, members, taskT
                 setAssignedToMember(taskToEdit.assigned_to_member || null);
                 setDueDate(taskToEdit.due_date ?? '');
                 setPriority(taskToEdit.priority ?? null);
+                setClientId(taskToEdit.client_id ?? null);
                 setSelectedToolIds(taskToEdit.tools?.map(t => t.id) || []);
                 setInlineTools([]);
             } else {
@@ -90,6 +93,7 @@ export function AddTaskModal({ isOpen, onClose, onSuccess, tools, members, taskT
         setAssignedToMember(null);
         setDueDate('');
         setPriority(null);
+        setClientId(null);
         setSelectedToolIds([]);
         setInlineTools([]);
         setToolSearch('');
@@ -157,7 +161,8 @@ export function AddTaskModal({ isOpen, onClose, onSuccess, tools, members, taskT
                         project_id: projectId,
                         assigned_to_member: assignedToMember,
                         due_date: dueDate || null,
-                        priority
+                        priority,
+                        client_id: clientId || null
                     })
                     .eq('id', taskToEdit!.id);
 
@@ -185,7 +190,8 @@ export function AddTaskModal({ isOpen, onClose, onSuccess, tools, members, taskT
                         workspace_id: activeWorkspace.id,
                         assigned_to_member: assignedToMember,
                         due_date: dueDate || null,
-                        priority
+                        priority,
+                        client_id: clientId || null
                     })
                     .select('id')
                     .single();
@@ -284,6 +290,23 @@ export function AddTaskModal({ isOpen, onClose, onSuccess, tools, members, taskT
                         ))}
                     </select>
                 </div>
+
+                {/* Client Assignment */}
+                {clients && clients.length > 0 && (
+                    <div>
+                        <label className="block text-sm font-medium text-text-muted dark:text-slate-400 mb-1">Client</label>
+                        <select
+                            value={clientId || ''}
+                            onChange={(e) => setClientId(e.target.value || null)}
+                            className="input-field"
+                        >
+                            <option value="">No Client</option>
+                            {clients.filter(c => c.status === 'active' || c.status === 'negotiating').map(c => (
+                                <option key={c.id} value={c.id}>{c.name}</option>
+                            ))}
+                        </select>
+                    </div>
+                )}
 
                 {/* Description */}
                 <div>

@@ -16,11 +16,11 @@
 
 @layer components {
   .glass-panel {
-    @apply bg-white/70 backdrop-blur-md border border-white/20 shadow-xl dark:bg-dark-surface/70 dark:border-dark-border/50;
+    @apply bg-white/70 backdrop-blur-md border border-white/20 shadow-xl dark:bg-dark-surface/80 dark:border-dark-border/60;
   }
 
   .glass-sidebar {
-    @apply bg-white/80 backdrop-blur-lg border-r border-slate-200/50 dark:bg-dark-surface/90 dark:border-dark-border;
+    @apply bg-white/80 backdrop-blur-lg border-r border-slate-200/60 dark:bg-[#0A1628] dark:border-[#1A3A5C];
   }
 
   .btn-primary {
@@ -28,11 +28,10 @@
   }
 
   .input-field {
-    @apply w-full px-4 py-2 rounded-lg border border-slate-200 bg-white/50 focus:bg-white focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all outline-none dark:bg-slate-900/50 dark:border-dark-border dark:text-slate-100 dark:focus:bg-dark-surface;
+    @apply w-full px-4 py-2 rounded-lg border border-slate-200 bg-white/60 focus:bg-white focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all outline-none dark:bg-[#0A1628] dark:border-dark-border dark:text-slate-100 dark:focus:bg-dark-surface dark:focus:border-primary;
   }
 
-  /* Card styles */
   .card-base {
-    @apply bg-white rounded-xl border border-slate-100 shadow-soft hover:shadow-soft-hover transition-all duration-300 dark:bg-dark-surface dark:border-dark-border dark:shadow-none dark:hover:bg-slate-800;
+    @apply bg-white rounded-xl border border-slate-100 shadow-soft hover:shadow-soft-hover transition-all duration-300 dark:bg-dark-surface dark:border-dark-border dark:shadow-none dark:hover:border-[#1A3A5C] dark:hover:bg-[#0F1E35];
   }
 }

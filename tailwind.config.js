@@ -10,26 +10,29 @@ export default {
             fontFamily: {
                 sans: ['Inter', 'sans-serif'],
             },
+            screens: {
+                fold: '720px',
+            },
             boxShadow: {
-                'soft': '0 4px 20px -2px rgba(0, 0, 0, 0.05)',
-                'soft-hover': '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)',
-                'glow': '0 0 15px rgba(99, 102, 241, 0.3)',
+                'soft': '0 4px 24px -2px rgba(0, 0, 0, 0.07)',
+                'soft-hover': '0 12px 32px -4px rgba(8, 145, 178, 0.15), 0 4px 12px -2px rgba(0, 0, 0, 0.08)',
+                'glow': '0 0 20px rgba(8, 145, 178, 0.4)',
             },
             colors: {
-                background: '#F8FAFC', // Slate 50
+                background: '#F8FBFF',
                 surface: '#FFFFFF',
                 primary: {
-                    DEFAULT: '#6366F1', // Indigo 500
-                    hover: '#4F46E5',   // Indigo 600
+                    DEFAULT: '#0891B2',
+                    hover: '#0E7490',
                 },
                 text: {
-                    main: '#1E293B',    // Slate 800
-                    muted: '#64748B',   // Slate 500
+                    main: '#0F172A',
+                    muted: '#475569',
                 },
                 dark: {
-                    bg: '#0F172A',      // Slate 900
-                    surface: '#1E293B', // Slate 800
-                    border: '#334155',  // Slate 700
+                    bg: '#050D1A',
+                    surface: '#0A1628',
+                    border: '#1A3A5C',
                 }
             },
             animation: {

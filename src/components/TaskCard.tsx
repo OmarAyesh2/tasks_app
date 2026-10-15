@@ -1,6 +1,7 @@
-import { useState, useRef } from 'react';
-import type { Task, Project } from '../types';
-import { Check, Link as LinkIcon, ExternalLink, Trash2, Library, Pencil, Loader2, Sparkles, Plus, X, Paperclip, File as FileIcon, User as UserIcon, GripVertical } from 'lucide-react';
+import { useState, useRef, useEffect } from 'react';
+import type { Task, Project, TaskComment, TaskAsset } from '../types';
+import { ConfirmModal } from './ConfirmModal';
+import { Check, Link as LinkIcon, ExternalLink, Trash2, Library, Pencil, Loader2, Sparkles, Plus, X, Paperclip, File as FileIcon, User as UserIcon, GripVertical, MessageSquare, Send, ContactRound } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -26,7 +27,38 @@ export function TaskCard({ task, members, projects, onStatusChange, onUpdateTask
     const [newStepText, setNewStepText] = useState('');
     const [isUploadingAsset, setIsUploadingAsset] = useState(false);
     const [uploadProgress, setUploadProgress] = useState(0);
+    const [assetToDelete, setAssetToDelete] = useState<TaskAsset | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
+
+    // Comments state
+    const [showComments, setShowComments] = useState(false);
+    const [comments, setComments] = useState<TaskComment[]>([]);
+    const [commentText, setCommentText] = useState('');
+    const [isLoadingComments, setIsLoadingComments] = useState(false);
+    const [isSubmittingComment, setIsSubmittingComment] = useState(false);
+
+    const fetchComments = async () => {
+        if (!supabase) return;
+        setIsLoadingComments(true);
+        try {
+            const { data } = await supabase
+                .from('task_comments')
+                .select('*')
+                .eq('task_id', task.id)
+                .order('created_at', { ascending: true });
+            if (data) setComments(data as TaskComment[]);
+        } catch (error) {
+            console.error('Error fetching comments:', error);
+        } finally {
+            setIsLoadingComments(false);
+        }
+    };
+
+    useEffect(() => {
+        if (showComments) {
+            fetchComments();
+        }
+    }, [showComments]);
 
     const assignee = members.find(m => m.id === task.assigned_to_member);
 
@@ -211,10 +243,7 @@ Strictly return a JSON array of sub-task objects formatted exactly like this: [{
         }
     };
 
-    const handleDeleteAsset = async (assetId: string, e: React.MouseEvent) => {
-        e.preventDefault();
-        e.stopPropagation();
-
+    const handleDeleteAsset = async (assetId: string) => {
         try {
             if (!supabase) return;
             
@@ -251,8 +280,8 @@ Strictly return a JSON array of sub-task objects formatted exactly like this: [{
     const isDone = task.status === 'done';
 
     return (
-        <div className={`group relative bg-white dark:bg-dark-surface rounded-xl p-5 border border-slate-100 dark:border-dark-border shadow-soft hover:shadow-soft-hover dark:shadow-none dark:hover:bg-slate-800 transition-all duration-300 animate-fade-in pr-14${isDragging ? ' opacity-50 shadow-lg' : ''}`}>
-            <div className="absolute top-4 right-4 flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-all duration-200">
+        <div className={`group relative bg-white dark:bg-dark-surface rounded-xl p-5 border border-slate-100 dark:border-dark-border shadow-soft hover:shadow-soft-hover dark:shadow-none dark:hover:bg-slate-800 transition-all duration-300 animate-fade-in pr-5 md:pr-14${isDragging ? ' opacity-50 shadow-lg' : ''}`}>
+            <div className="absolute top-4 right-4 flex flex-col gap-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-all duration-200">
                 <button
                     type="button"
                     onClick={(e) => {
@@ -300,7 +329,7 @@ Strictly return a JSON array of sub-task objects formatted exactly like this: [{
                             <Check className="w-3.5 h-3.5" strokeWidth={3} />
                         </button>
                         <h3 className={cn(
-                            "text-lg font-medium transition-all duration-200",
+                            "text-lg font-medium transition-all duration-200 min-w-0 break-words",
                             isDone ? "text-text-muted line-through" : "text-text-main dark:text-slate-200"
                         )}>
                             {task.name}
@@ -349,6 +378,12 @@ Strictly return a JSON array of sub-task objects formatted exactly like this: [{
                                 </span>
                             );
                         })()}
+                        {task.client && (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium border bg-teal-50 text-teal-700 border-teal-200 dark:bg-teal-900/30 dark:text-teal-400 dark:border-teal-800/50">
+                                <ContactRound className="w-3 h-3" />
+                                {task.client.name}
+                            </span>
+                        )}
                     </div>
 
                     {task.description && (
@@ -364,7 +399,7 @@ Strictly return a JSON array of sub-task objects formatted exactly like this: [{
                                     type="button"
                                     onClick={handleAIBreakDown}
                                     disabled={isGenerating}
-                                    className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-md bg-indigo-50 text-indigo-600 hover:bg-indigo-100 dark:bg-indigo-900/30 dark:text-indigo-400 dark:hover:bg-indigo-900/50 transition-colors disabled:opacity-50"
+                                    className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-md bg-indigo-50 text-indigo-600 hover:bg-indigo-100 dark:bg-indigo-900/30 dark:text-indigo-400 dark:hover:bg-indigo-900/50 transition-colors disabled:opacity-50 min-h-[44px] md:min-h-0"
                                 >
                                     {isGenerating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
                                     AI Break Down
@@ -427,12 +462,12 @@ Strictly return a JSON array of sub-task objects formatted exactly like this: [{
                                 onChange={(e) => setNewStepText(e.target.value)}
                                 onKeyDown={(e) => e.key === 'Enter' && addSubTask()}
                                 placeholder="Add a step..."
-                                className="flex-1 text-sm bg-transparent border-b border-slate-200 dark:border-slate-700 px-1 py-1 focus:outline-none focus:border-primary dark:text-slate-200 placeholder:text-slate-400"
+                                className="flex-1 text-sm bg-transparent border-b border-slate-200 dark:border-slate-700 px-1 py-1 min-h-[44px] md:min-h-0 focus:outline-none focus:border-primary dark:text-slate-200 placeholder:text-slate-400"
                             />
                             <button
                                 onClick={addSubTask}
                                 disabled={!newStepText.trim()}
-                                className="p-1 text-primary disabled:opacity-40 hover:bg-primary/10 rounded transition-colors"
+                                className="p-1 min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 flex items-center justify-center text-primary disabled:opacity-40 hover:bg-primary/10 rounded transition-colors"
                             >
                                 <Plus className="w-4 h-4" />
                             </button>
@@ -452,7 +487,7 @@ Strictly return a JSON array of sub-task objects formatted exactly like this: [{
                                 type="button"
                                 onClick={() => fileInputRef.current?.click()}
                                 disabled={isUploadingAsset}
-                                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded border border-dashed border-slate-300 dark:border-slate-600 text-slate-500 hover:text-primary hover:border-primary dark:text-slate-400 dark:hover:text-primary transition-all disabled:opacity-50"
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded border border-dashed border-slate-300 dark:border-slate-600 text-slate-500 hover:text-primary hover:border-primary dark:text-slate-400 dark:hover:text-primary transition-all disabled:opacity-50 min-h-[44px] md:min-h-0"
                             >
                                 {isUploadingAsset ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Paperclip className="w-3.5 h-3.5" />}
                                 {isUploadingAsset
@@ -464,20 +499,24 @@ Strictly return a JSON array of sub-task objects formatted exactly like this: [{
                         </div>
 
                         {task.assets && task.assets.length > 0 && (
-                            <div className="flex flex-wrap gap-2 pt-1">
+                            <div className="flex flex-wrap gap-2 pt-1 max-w-full">
                                 {task.assets.map((asset) => (
                                     <a
                                         key={asset.id}
                                         href={asset.public_url}
                                         target="_blank"
                                         rel="noopener noreferrer"
-                                        className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md bg-indigo-50/50 dark:bg-indigo-900/20 text-xs font-medium text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/40 transition-colors border border-indigo-100 dark:border-indigo-800/50"
+                                        className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md bg-indigo-50/50 dark:bg-indigo-900/20 text-xs font-medium text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/40 transition-colors border border-indigo-100 dark:border-indigo-800/50 max-w-full"
                                     >
                                         <FileIcon className="w-3 h-3 flex-shrink-0" />
-                                        <span className="truncate max-w-[180px]">{asset.file_name}</span>
+                                        <span className="truncate max-w-[120px] sm:max-w-[180px]">{asset.file_name}</span>
                                         <button
                                             type="button"
-                                            onClick={(e) => handleDeleteAsset(asset.id, e)}
+                                            onClick={(e) => {
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                                setAssetToDelete(asset);
+                                            }}
                                             className="p-0.5 ml-1 flex-shrink-0 text-indigo-400 hover:text-red-500 hover:bg-white/50 dark:hover:bg-dark-surface/50 rounded transition-colors"
                                         >
                                             <X className="w-3 h-3" />
@@ -523,8 +562,111 @@ Strictly return a JSON array of sub-task objects formatted exactly like this: [{
                             ))}
                         </div>
                     )}
+
+                    {/* Comments Toggle */}
+                    <div className="pl-9">
+                        <button
+                            type="button"
+                            onClick={() => setShowComments(!showComments)}
+                            className="inline-flex items-center gap-1.5 text-xs text-text-muted dark:text-slate-500 hover:text-primary dark:hover:text-primary transition-colors mt-3"
+                        >
+                            <MessageSquare className="w-3.5 h-3.5" />
+                            {`Comments${comments.length > 0 ? ` (${comments.length})` : ''}`}
+                        </button>
+
+                        {showComments && (
+                            <div className="mt-2 space-y-3 border-t border-slate-100 dark:border-dark-border pt-3">
+                                {isLoadingComments ? (
+                                    <div className="flex justify-center py-3">
+                                        <Loader2 className="w-4 h-4 animate-spin text-primary/50" />
+                                    </div>
+                                ) : (
+                                    comments.map(comment => (
+                                        <div key={comment.id} className="group/comment flex items-start justify-between gap-2">
+                                            <div className="flex-1 min-w-0">
+                                                <div className="flex items-center">
+                                                    <span className="font-medium text-xs text-text-main dark:text-slate-300">
+                                                        {comment.author_email.split('@')[0]}
+                                                    </span>
+                                                    <span className="text-[10px] text-text-muted ml-2">
+                                                        {new Date(comment.created_at).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                                    </span>
+                                                </div>
+                                                <p className="text-sm text-text-main dark:text-slate-300 mt-0.5">{comment.content}</p>
+                                            </div>
+                                            {comment.user_id === user?.id && (
+                                                <button
+                                                    type="button"
+                                                    onClick={async () => {
+                                                        setComments(prev => prev.filter(c => c.id !== comment.id));
+                                                        await supabase?.from('task_comments').delete().eq('id', comment.id);
+                                                    }}
+                                                    className="opacity-0 group-hover/comment:opacity-100 p-1 text-slate-400 hover:text-red-500 transition-all flex-shrink-0"
+                                                >
+                                                    <X className="w-3 h-3" />
+                                                </button>
+                                            )}
+                                        </div>
+                                    ))
+                                )}
+
+                                {/* Add comment input */}
+                                <div className="flex gap-2 items-end">
+                                    <textarea
+                                        rows={2}
+                                        value={commentText}
+                                        onChange={(e) => setCommentText(e.target.value)}
+                                        className="input-field text-sm flex-1 resize-none"
+                                        placeholder="Write a comment..."
+                                    />
+                                    <button
+                                        type="button"
+                                        disabled={!commentText.trim() || isSubmittingComment}
+                                        onClick={async () => {
+                                            if (!supabase || !user || !activeWorkspace) return;
+                                            setIsSubmittingComment(true);
+                                            try {
+                                                const { data, error } = await supabase
+                                                    .from('task_comments')
+                                                    .insert({
+                                                        task_id: task.id,
+                                                        workspace_id: activeWorkspace.id,
+                                                        user_id: user.id,
+                                                        author_email: user.email,
+                                                        content: commentText.trim()
+                                                    })
+                                                    .select()
+                                                    .single();
+                                                if (error) throw error;
+                                                setComments(prev => [...prev, data as TaskComment]);
+                                                setCommentText('');
+                                            } catch (error) {
+                                                console.error('Error adding comment:', error);
+                                            } finally {
+                                                setIsSubmittingComment(false);
+                                            }
+                                        }}
+                                        className="p-2 text-primary hover:bg-primary/10 rounded-lg transition-colors disabled:opacity-40 flex-shrink-0"
+                                    >
+                                        {isSubmittingComment ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
                 </div>
             </div>
+
+            <ConfirmModal
+                isOpen={assetToDelete !== null}
+                onClose={() => setAssetToDelete(null)}
+                onConfirm={() => {
+                    if (assetToDelete) handleDeleteAsset(assetToDelete.id);
+                    setAssetToDelete(null);
+                }}
+                title="Delete Attachment"
+                message={`Are you sure you want to delete "${assetToDelete?.file_name}"? This action cannot be undone.`}
+            />
         </div>
     );
 }

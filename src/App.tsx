@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { useWorkspace } from './context/WorkspaceContext';
 import type { WorkspaceMember } from './context/WorkspaceContext';
@@ -139,7 +139,8 @@ function Dashboard() {
             tool_id,
             tools (*)
           ),
-          task_assets (*)
+          task_assets (*),
+          clients ( id, name )
         `)
         .eq('workspace_id', activeWorkspace.id)
         .order('sort_order', { ascending: true });
@@ -149,11 +150,13 @@ function Dashboard() {
           ...t,
           tools: (t.task_tools ?? []).map((jt: any) => jt.tools).filter(Boolean),
           assets: t.task_assets ?? [],
+          client: t.clients ?? null,
         }));
         // Remove the raw junction keys
         enriched.forEach((t: any) => {
           delete t.task_tools;
           delete t.task_assets;
+          delete t.clients;
         });
         setTasks(enriched as Task[]);
       }
@@ -201,6 +204,29 @@ function Dashboard() {
     }
   }, [user, activeWorkspace?.id]);
 
+  // Realtime live sync
+  useEffect(() => {
+    if (!supabase || !activeWorkspace || !user) return;
+
+    const debounceRef_rt: { current: ReturnType<typeof setTimeout> | null } = { current: null };
+    const debouncedFetch = () => {
+      if (debounceRef_rt.current) clearTimeout(debounceRef_rt.current);
+      debounceRef_rt.current = setTimeout(() => fetchData(), 500);
+    };
+
+    const channel = supabase
+      .channel(`workspace-${activeWorkspace.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks', filter: `workspace_id=eq.${activeWorkspace.id}` }, debouncedFetch)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'projects', filter: `workspace_id=eq.${activeWorkspace.id}` }, debouncedFetch)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'clients', filter: `workspace_id=eq.${activeWorkspace.id}` }, debouncedFetch)
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+      if (debounceRef_rt.current) clearTimeout(debounceRef_rt.current);
+    };
+  }, [activeWorkspace?.id, user]);
+
   // Guard: if client tracker is disabled, redirect away from clients view
   useEffect(() => {
     if (currentView === 'clients' && !activeWorkspace?.enable_client_tracker) {
@@ -239,8 +265,8 @@ function Dashboard() {
   // Delete Confirmation State
   const [deleteConfig, setDeleteConfig] = useState<{
     isOpen: boolean;
-    type: 'task' | 'tool';
-    item: Task | Tool | null;
+    type: 'task' | 'tool' | 'project';
+    item: Task | Tool | Project | null;
   }>({
     isOpen: false,
     type: 'task',
@@ -283,6 +309,23 @@ function Dashboard() {
         console.error('Error deleting task:', error);
         fetchData(); // Revert
       }
+    } else if (type === 'project') {
+      const remainingProjects = projects.filter(p => p.id !== item.id);
+      setProjects(remainingProjects);
+      if (currentProjectId === item.id) {
+        setCurrentProjectId(remainingProjects.length > 0 ? remainingProjects[0].id : null);
+      }
+      setDeleteConfig(prev => ({ ...prev, isOpen: false }));
+
+      const { error } = await supabase
+        .from('projects')
+        .delete()
+        .eq('id', item.id);
+
+      if (error) {
+        console.error('Error deleting project:', error);
+        fetchData(); // Revert
+      }
     } else {
       setTools(tools.filter(t => t.id !== item.id));
       setDeleteConfig(prev => ({ ...prev, isOpen: false }));
@@ -299,28 +342,15 @@ function Dashboard() {
     }
   };
 
-  const handleDeleteProject = async (projectId: string, e: React.MouseEvent) => {
+  const handleDeleteProject = (projectId: string, e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
 
-    if (!confirm("Are you sure you want to delete this project? All associated tasks will be lost.")) return;
-
-    try {
-      const { error } = await supabase!.from('projects').delete().eq('id', projectId);
-
-      if (error) {
-        throw error;
-      }
-
-      const remainingProjects = projects.filter(p => p.id !== projectId);
-      setProjects(remainingProjects);
-
-      if (currentProjectId === projectId) {
-        setCurrentProjectId(remainingProjects.length > 0 ? remainingProjects[0].id : null);
-      }
-    } catch (error: any) {
-      alert(`Error deleting project: ${error.message || error}`);
-    }
+    setDeleteConfig({
+      isOpen: true,
+      type: 'project',
+      item: projects.find(p => p.id === projectId) ?? null,
+    });
   };
 
   if (authLoading || workspaceLoading) {
@@ -404,8 +434,8 @@ function Dashboard() {
         onDeleteProject={handleDeleteProject}
       />
 
-      <main className="ml-0 md:ml-64 p-4 md:p-8 min-h-screen transition-all duration-300">
-        <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8 animate-fade-in">
+      <main className="ml-0 md:ml-64 p-3 fold:p-5 md:p-8 min-h-screen transition-all duration-300">
+        <header className="flex flex-col fold:flex-row fold:items-center md:flex-row md:items-center justify-between gap-4 mb-8 animate-fade-in">
           <div className="flex items-center gap-4">
             <button
               onClick={() => setIsMobileMenuOpen(true)}
@@ -415,7 +445,7 @@ function Dashboard() {
             </button>
             <div>
               <div className="flex items-center gap-2 mb-1">
-                <h1 className="text-3xl font-bold text-text-main dark:text-slate-100 capitalize">
+                <h1 className="text-2xl fold:text-3xl font-bold text-text-main dark:text-slate-100 capitalize">
                   {currentView === 'tasks' ? 'Tasks' 
                    : currentView === 'completed' ? 'Completed Tasks' 
                    : currentView === 'members' ? 'Members' 
@@ -459,7 +489,7 @@ function Dashboard() {
                   setIsTaskModalOpen(true);
                 }
               }}
-              className="btn-primary flex items-center gap-2 shadow-lg hover:shadow-primary/20 w-full md:w-auto justify-center"
+              className="btn-primary flex items-center gap-2 shadow-lg hover:shadow-primary/20 w-full fold:w-auto md:w-auto justify-center"
             >
               <Plus className="w-5 h-5" />
               Add {currentView === 'tools' ? 'Resource' : currentView === 'clients' ? 'Client' : 'Task'}
@@ -478,7 +508,7 @@ function Dashboard() {
             ) : currentView === 'work_time' ? (
               <WorkTime />
             ) : currentView === 'clients' ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 fold:grid-cols-2 lg:grid-cols-3 gap-6">
                 {clients.length === 0 ? (
                   <div className="col-span-full text-center py-12 bg-white/50 dark:bg-dark-surface/50 rounded-2xl border border-dashed border-slate-300 dark:border-dark-border">
                     <p className="text-text-muted dark:text-slate-400">No clients yet. Add your first client to get started.</p>
@@ -548,14 +578,14 @@ function Dashboard() {
                 </div>
               </div>
             ) : (
-              <div className="max-w-3xl">
+              <div className="max-w-3xl xl:max-w-4xl">
                 {/* Task Filter for Owners/Admins */}
                 {(currentMemberProfile?.permission_role === 'owner' || currentMemberProfile?.permission_role === 'admin') && (
                   <div className="flex justify-end mb-4">
                     <select
                       value={selectedMemberFilter}
                       onChange={(e) => setSelectedMemberFilter(e.target.value)}
-                      className="input-field max-w-xs text-sm py-1.5 cursor-pointer"
+                      className="input-field w-full fold:w-auto text-sm py-1.5 cursor-pointer"
                     >
                       <option value="all">All Members</option>
                       <option value="me">Assigned to Me</option>
@@ -630,6 +660,7 @@ function Dashboard() {
           taskToEdit={taskToEdit}
           projects={projects}
           defaultProjectId={currentProjectId}
+          clients={clients}
         />
 
         <AddToolModal
