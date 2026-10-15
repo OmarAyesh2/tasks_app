@@ -17,6 +17,38 @@ import { WorkTime } from './components/WorkTime';
 import { Plus, Loader2, Menu } from 'lucide-react';
 import { supabase } from './lib/supabase';
 import type { Task, Tool, Project, Client } from './types';
+import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
+import { SortableContext, verticalListSortingStrategy, arrayMove, useSortable } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+
+interface SortableTaskCardProps {
+  task: Task;
+  members: WorkspaceMember[];
+  projects: Project[];
+  onStatusChange: (task: Task) => void;
+  onUpdateTask: (taskId: string, updates: Partial<Task>) => void;
+  onEdit: () => void;
+  onDelete: () => void;
+}
+
+function SortableTaskCard(props: SortableTaskCardProps) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: props.task.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+
+  return (
+    <div ref={setNodeRef} style={style} {...attributes}>
+      <TaskCard
+        {...props}
+        isDragging={isDragging}
+        dragHandleProps={listeners}
+      />
+    </div>
+  );
+}
 
 function Dashboard() {
   if (!supabase) return null;
@@ -44,6 +76,14 @@ function Dashboard() {
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    })
+  );
 
   const fetchTools = async () => {
     if (!user) return;
@@ -102,7 +142,7 @@ function Dashboard() {
           task_assets (*)
         `)
         .eq('workspace_id', activeWorkspace.id)
-        .order('created_at', { ascending: false });
+        .order('sort_order', { ascending: true });
 
       if (tasksData) {
         const enriched = tasksData.map((t: any) => ({
@@ -313,6 +353,34 @@ function Dashboard() {
 
   const currentProjectName = currentProjectId ? projects.find(p => p.id === currentProjectId)?.name : null;
 
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const oldIndex = filteredTasks.findIndex(t => t.id === active.id);
+    const newIndex = filteredTasks.findIndex(t => t.id === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    const reordered = arrayMove(filteredTasks, oldIndex, newIndex);
+
+    // Optimistic update of full tasks array preserving non-filtered tasks
+    const reorderedIds = reordered.map(t => t.id);
+    setTasks(prev => {
+      const nonFiltered = prev.filter(t => !reorderedIds.includes(t.id));
+      const updatedFiltered = reordered.map((t, i) => ({ ...t, sort_order: i * 1000 }));
+      return [...nonFiltered, ...updatedFiltered].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+    });
+
+    // Persist to Supabase
+    for (let i = 0; i < reordered.length; i++) {
+      const newSortOrder = i * 1000;
+      await supabase!
+        .from('tasks')
+        .update({ sort_order: newSortOrder })
+        .eq('id', reordered[i].id);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background dark:bg-dark-bg text-text-main dark:text-slate-100 font-sans transition-colors duration-300">
       <Sidebar
@@ -507,6 +575,26 @@ function Dashboard() {
                     <div className="text-center py-12 bg-white/50 dark:bg-dark-surface/50 rounded-2xl border border-dashed border-slate-300 dark:border-dark-border">
                       <p className="text-text-muted dark:text-slate-400">No items found</p>
                     </div>
+                ) : currentView === 'tasks' ? (
+                  <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+                    <SortableContext items={filteredTasks.map(t => t.id)} strategy={verticalListSortingStrategy}>
+                      {filteredTasks.map(task => (
+                        <SortableTaskCard
+                          key={task.id}
+                          task={task}
+                          members={members}
+                          projects={projects}
+                          onStatusChange={handleTaskStatusChange}
+                          onUpdateTask={handleTaskUpdate}
+                          onEdit={() => {
+                            setTaskToEdit(task);
+                            setIsTaskModalOpen(true);
+                          }}
+                          onDelete={() => handleDeleteTask(task)}
+                        />
+                      ))}
+                    </SortableContext>
+                  </DndContext>
                 ) : (
                   filteredTasks.map(task => (
                     <TaskCard

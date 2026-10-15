@@ -34,6 +34,8 @@ export function AddTaskModal({ isOpen, onClose, onSuccess, tools, members, taskT
     const [newLinkUrl, setNewLinkUrl] = useState('');
     const [projectId, setProjectId] = useState<string | null>(defaultProjectId || null);
     const [assignedToMember, setAssignedToMember] = useState<string | null>(null);
+    const [dueDate, setDueDate] = useState('');
+    const [priority, setPriority] = useState<'high' | 'medium' | 'low' | null>(null);
 
     // Tool selection state
     const [selectedToolIds, setSelectedToolIds] = useState<string[]>([]);
@@ -57,6 +59,8 @@ export function AddTaskModal({ isOpen, onClose, onSuccess, tools, members, taskT
                 setLinks(taskToEdit.links || []);
                 setProjectId(taskToEdit.project_id || null);
                 setAssignedToMember(taskToEdit.assigned_to_member || null);
+                setDueDate(taskToEdit.due_date ?? '');
+                setPriority(taskToEdit.priority ?? null);
                 setSelectedToolIds(taskToEdit.tools?.map(t => t.id) || []);
                 setInlineTools([]);
             } else {
@@ -84,6 +88,8 @@ export function AddTaskModal({ isOpen, onClose, onSuccess, tools, members, taskT
         setNewLinkName('');
         setNewLinkUrl('');
         setAssignedToMember(null);
+        setDueDate('');
+        setPriority(null);
         setSelectedToolIds([]);
         setInlineTools([]);
         setToolSearch('');
@@ -149,7 +155,9 @@ export function AddTaskModal({ isOpen, onClose, onSuccess, tools, members, taskT
                         description: description || null,
                         links,
                         project_id: projectId,
-                        assigned_to_member: assignedToMember
+                        assigned_to_member: assignedToMember,
+                        due_date: dueDate || null,
+                        priority
                     })
                     .eq('id', taskToEdit!.id);
 
@@ -175,7 +183,9 @@ export function AddTaskModal({ isOpen, onClose, onSuccess, tools, members, taskT
                         status: 'to_do',
                         project_id: projectId,
                         workspace_id: activeWorkspace.id,
-                        assigned_to_member: assignedToMember
+                        assigned_to_member: assignedToMember,
+                        due_date: dueDate || null,
+                        priority
                     })
                     .select('id')
                     .single();
@@ -284,6 +294,59 @@ export function AddTaskModal({ isOpen, onClose, onSuccess, tools, members, taskT
                         className="input-field min-h-[80px] resize-none"
                         placeholder="Add some details..."
                     />
+                </div>
+
+                {/* Due Date */}
+                <div>
+                    <div className="flex items-center justify-between mb-1">
+                        <label className="block text-sm font-medium text-text-muted dark:text-slate-400">Due Date</label>
+                        {dueDate && (
+                            <button
+                                type="button"
+                                onClick={() => setDueDate('')}
+                                className="text-xs text-primary hover:text-primary-hover transition-colors"
+                            >
+                                Clear
+                            </button>
+                        )}
+                    </div>
+                    <input
+                        type="date"
+                        value={dueDate}
+                        onChange={(e) => setDueDate(e.target.value)}
+                        className="input-field"
+                    />
+                </div>
+
+                {/* Priority */}
+                <div>
+                    <label className="block text-sm font-medium text-text-muted dark:text-slate-400 mb-1">Priority</label>
+                    <div className="flex gap-2">
+                        {(['high', 'medium', 'low'] as const).map((level) => {
+                            const isSelected = priority === level;
+                            const colorMap = {
+                                high: isSelected
+                                    ? 'bg-red-100 text-red-600 border-red-300 dark:bg-red-900/30 dark:text-red-400'
+                                    : 'bg-white dark:bg-dark-surface text-text-muted dark:text-slate-400 border-slate-200 dark:border-dark-border hover:border-slate-300',
+                                medium: isSelected
+                                    ? 'bg-amber-100 text-amber-600 border-amber-300 dark:bg-amber-900/30 dark:text-amber-400'
+                                    : 'bg-white dark:bg-dark-surface text-text-muted dark:text-slate-400 border-slate-200 dark:border-dark-border hover:border-slate-300',
+                                low: isSelected
+                                    ? 'bg-blue-100 text-blue-600 border-blue-300 dark:bg-blue-900/30 dark:text-blue-400'
+                                    : 'bg-white dark:bg-dark-surface text-text-muted dark:text-slate-400 border-slate-200 dark:border-dark-border hover:border-slate-300',
+                            };
+                            return (
+                                <button
+                                    key={level}
+                                    type="button"
+                                    onClick={() => setPriority(isSelected ? null : level)}
+                                    className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-full border transition-colors ${colorMap[level]}`}
+                                >
+                                    {level.charAt(0).toUpperCase() + level.slice(1)}
+                                </button>
+                            );
+                        })}
+                    </div>
                 </div>
 
                 {/* Attach Resources */}

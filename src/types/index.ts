@@ -43,6 +43,9 @@ export type Task = {
     project_id?: string | null;
     assigned_to_member?: string | null;
     sub_tasks?: SubTask[] | null;
+    due_date?: string | null;
+    priority?: 'high' | 'medium' | 'low' | null;
+    sort_order?: number;
     tools?: Tool[];
     assets?: TaskAsset[];
 };

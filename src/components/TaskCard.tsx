@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react';
 import type { Task, Project } from '../types';
-import { Check, Link as LinkIcon, ExternalLink, Trash2, Library, Pencil, Loader2, Sparkles, Plus, X, Paperclip, File as FileIcon, User as UserIcon } from 'lucide-react';
+import { Check, Link as LinkIcon, ExternalLink, Trash2, Library, Pencil, Loader2, Sparkles, Plus, X, Paperclip, File as FileIcon, User as UserIcon, GripVertical } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -15,9 +15,11 @@ interface TaskCardProps {
     onUpdateTask: (taskId: string, updates: Partial<Task>) => void;
     onEdit: () => void;
     onDelete: () => void;
+    isDragging?: boolean;
+    dragHandleProps?: React.HTMLAttributes<HTMLElement>;
 }
 
-export function TaskCard({ task, members, projects, onStatusChange, onUpdateTask, onEdit, onDelete }: TaskCardProps) {
+export function TaskCard({ task, members, projects, onStatusChange, onUpdateTask, onEdit, onDelete, isDragging, dragHandleProps }: TaskCardProps) {
     const { activeWorkspace } = useWorkspace();
     const { user } = useAuth();
     const [isGenerating, setIsGenerating] = useState(false);
@@ -249,7 +251,7 @@ Strictly return a JSON array of sub-task objects formatted exactly like this: [{
     const isDone = task.status === 'done';
 
     return (
-        <div className="group relative bg-white dark:bg-dark-surface rounded-xl p-5 border border-slate-100 dark:border-dark-border shadow-soft hover:shadow-soft-hover dark:shadow-none dark:hover:bg-slate-800 transition-all duration-300 animate-fade-in pr-14">
+        <div className={`group relative bg-white dark:bg-dark-surface rounded-xl p-5 border border-slate-100 dark:border-dark-border shadow-soft hover:shadow-soft-hover dark:shadow-none dark:hover:bg-slate-800 transition-all duration-300 animate-fade-in pr-14${isDragging ? ' opacity-50 shadow-lg' : ''}`}>
             <div className="absolute top-4 right-4 flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-all duration-200">
                 <button
                     type="button"
@@ -277,6 +279,14 @@ Strictly return a JSON array of sub-task objects formatted exactly like this: [{
             <div className="flex items-start justify-between gap-4">
                 <div className="flex-1 space-y-2">
                     <div className="flex items-center gap-3 flex-wrap">
+                        {dragHandleProps && (
+                            <div
+                                {...dragHandleProps}
+                                className="cursor-grab active:cursor-grabbing text-slate-300 dark:text-slate-600 hover:text-slate-400 transition-colors"
+                            >
+                                <GripVertical className="w-5 h-5" />
+                            </div>
+                        )}
                         <button
                             type="button"
                             onClick={() => onStatusChange(task)}
@@ -301,6 +311,44 @@ Strictly return a JSON array of sub-task objects formatted exactly like this: [{
                                 {assignee.member_title ? `${assignee.email.split('@')[0]} (${assignee.member_title})` : assignee.email.split('@')[0]}
                             </span>
                         )}
+                        {task.due_date && (() => {
+                            const todayStr = new Date().toLocaleDateString('en-CA');
+                            const dueDateObj = new Date(task.due_date + 'T00:00:00');
+                            const formatted = dueDateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                            const isOverdue = task.due_date < todayStr;
+                            const isToday = task.due_date === todayStr;
+
+                            let badgeClasses: string;
+                            let label: string;
+                            if (isOverdue) {
+                                badgeClasses = 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 border-red-200 dark:border-red-800';
+                                label = `Overdue · ${formatted}`;
+                            } else if (isToday) {
+                                badgeClasses = 'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-800';
+                                label = 'Due Today';
+                            } else {
+                                badgeClasses = 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700';
+                                label = `Due ${formatted}`;
+                            }
+
+                            return (
+                                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border ${badgeClasses}`}>
+                                    {label}
+                                </span>
+                            );
+                        })()}
+                        {task.priority && (() => {
+                            const priorityStyles = {
+                                high: 'bg-red-100 text-red-600 border-red-200 dark:bg-red-900/30 dark:text-red-400',
+                                medium: 'bg-amber-100 text-amber-600 border-amber-200 dark:bg-amber-900/30 dark:text-amber-400',
+                                low: 'bg-blue-100 text-blue-600 border-blue-200 dark:bg-blue-900/30 dark:text-blue-400',
+                            };
+                            return (
+                                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${priorityStyles[task.priority]}`}>
+                                    {task.priority.charAt(0).toUpperCase() + task.priority.slice(1)}
+                                </span>
+                            );
+                        })()}
                     </div>
 
                     {task.description && (
