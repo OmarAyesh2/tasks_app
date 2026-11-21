@@ -1,8 +1,10 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useWorkspace } from '../context/WorkspaceContext';
-import { ChevronDown, Plus, Loader2, Shield, Briefcase, Trash2 } from 'lucide-react';
+import { Check, ChevronsUpDown, Plus, Loader2, Trash2 } from 'lucide-react';
 import { supabase, driveAction } from '../lib/supabase';
 
+// Compact switcher: one card for the current workspace; switching, creating and deleting
+// live in its menu so they don't take sidebar space (and delete is never one stray click away).
 export function WorkspaceSelector() {
     const {
         workspaces,
@@ -14,25 +16,42 @@ export function WorkspaceSelector() {
         refreshWorkspaces,
     } = useWorkspace();
 
+    const [menuOpen, setMenuOpen] = useState(false);
     const [isCreating, setIsCreating] = useState(false);
     const [newName, setNewName] = useState('');
     const [submitting, setSubmitting] = useState(false);
+    const rootRef = useRef<HTMLDivElement>(null);
 
-    // ---------------------------------------------------------------
-    // Loading state
-    // ---------------------------------------------------------------
+    // close on outside click or Escape
+    useEffect(() => {
+        if (!menuOpen) return;
+        const onDown = (e: MouseEvent) => {
+            if (rootRef.current && !rootRef.current.contains(e.target as Node)) setMenuOpen(false);
+        };
+        const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setMenuOpen(false); };
+        document.addEventListener('mousedown', onDown);
+        document.addEventListener('keydown', onKey);
+        return () => {
+            document.removeEventListener('mousedown', onDown);
+            document.removeEventListener('keydown', onKey);
+        };
+    }, [menuOpen]);
+
     if (loading) {
         return (
-            <div className="px-4 py-3 flex items-center gap-2 text-text-muted">
+            <div className="px-3 py-3 flex items-center gap-2 text-text-muted">
                 <Loader2 className="w-4 h-4 animate-spin" />
                 <span className="text-xs">Loading workspaces…</span>
             </div>
         );
     }
 
-    // ---------------------------------------------------------------
-    // Create workspace handler
-    // ---------------------------------------------------------------
+    const closeMenu = () => {
+        setMenuOpen(false);
+        setIsCreating(false);
+        setNewName('');
+    };
+
     const handleCreate = async (e: React.FormEvent) => {
         e.preventDefault();
         const trimmed = newName.trim();
@@ -41,26 +60,23 @@ export function WorkspaceSelector() {
         setSubmitting(true);
         try {
             await createWorkspace(trimmed);
-            setNewName('');
-            setIsCreating(false);
+            closeMenu();
         } finally {
             setSubmitting(false);
         }
     };
 
-    // ---------------------------------------------------------------
-    // Delete workspace handler
-    // ---------------------------------------------------------------
     const handleDeleteWorkspace = async () => {
         if (!activeWorkspace) return;
-        if (window.confirm("Are you sure you want to permanently delete this workspace? This will erase all tasks, projects, and data for everyone.")) {
+        setMenuOpen(false);
+        if (window.confirm(`Permanently delete "${activeWorkspace.name}"? This erases all its tasks, projects, files and data for everyone.`)) {
             try {
                 // the database cascade can't reach Drive, so trash the workspace's folder first
                 await driveAction({ action: 'trashWorkspace', workspaceId: activeWorkspace.id });
 
                 const { error } = await supabase!.from('workspaces').delete().eq('id', activeWorkspace.id);
                 if (error) throw error;
-                
+
                 localStorage.removeItem('tasks_app_active_workspace_id');
                 await refreshWorkspaces();
             } catch (error) {
@@ -70,117 +86,116 @@ export function WorkspaceSelector() {
         }
     };
 
-    // ---------------------------------------------------------------
-    // Role badge color
-    // ---------------------------------------------------------------
-    const roleBadgeClasses: Record<string, string> = {
-        owner: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
-        admin: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400',
-        member: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
-        viewer: 'bg-slate-100 text-slate-600 dark:bg-slate-700/40 dark:text-slate-400',
-    };
-
     const role = currentMemberProfile?.permission_role ?? 'member';
+    const roleLabel = role.charAt(0).toUpperCase() + role.slice(1);
+    const subtitle = currentMemberProfile?.member_title ? `${roleLabel} · ${currentMemberProfile.member_title}` : roleLabel;
 
     return (
-        <div className="space-y-3">
-            {/* Workspace Dropdown */}
-            <div className="relative">
-                <label className="block text-[10px] font-semibold uppercase tracking-wider text-text-muted mb-1.5 px-1">
-                    Workspace
-                </label>
-                <div className="relative">
-                    <select
-                        value={activeWorkspace?.id ?? ''}
-                        onChange={(e) => setActiveWorkspaceById(e.target.value)}
-                        disabled={workspaces.length === 0}
-                        className="w-full appearance-none bg-white/60 dark:bg-dark-surface/60 border border-slate-200/80 dark:border-dark-border text-text-main dark:text-slate-100 text-sm font-medium py-2 pl-3 pr-9 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all cursor-pointer truncate"
-                    >
-                        {workspaces.length === 0 && (
-                            <option value="">No workspaces</option>
-                        )}
-                        {workspaces.map((ws) => (
-                            <option key={ws.id} value={ws.id}>
-                                {ws.name}
-                            </option>
-                        ))}
-                    </select>
-                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2.5 text-text-muted">
-                        <ChevronDown className="w-4 h-4" />
-                    </div>
-                </div>
-            </div>
+        <div ref={rootRef} className="relative">
+            <button
+                type="button"
+                onClick={() => (menuOpen ? closeMenu() : setMenuOpen(true))}
+                aria-haspopup="menu"
+                aria-expanded={menuOpen}
+                className="w-full flex items-center gap-3 p-2 rounded-2xl text-left border border-slate-200/80 bg-white/60 hover:bg-white dark:border-white/10 dark:bg-white/[0.04] dark:hover:bg-white/[0.07] transition-colors"
+            >
+                <span className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary to-accent text-on-primary flex items-center justify-center flex-shrink-0 text-sm font-semibold uppercase">
+                    {activeWorkspace?.name.charAt(0) ?? '?'}
+                </span>
+                <span className="flex-1 min-w-0">
+                    <span className="block text-sm font-semibold text-text-main dark:text-slate-100 truncate">
+                        {activeWorkspace?.name ?? 'No workspace'}
+                    </span>
+                    {activeWorkspace && <span className="block text-xs text-text-muted truncate">{subtitle}</span>}
+                </span>
+                <ChevronsUpDown className="w-4 h-4 text-text-muted flex-shrink-0" />
+            </button>
 
-            {/* Member Info */}
-            {currentMemberProfile && (
-                <div className="flex items-center gap-2 flex-wrap px-1">
-                    {currentMemberProfile.member_title && (
-                        <span className="inline-flex items-center gap-1 text-[11px] text-text-muted">
-                            <Briefcase className="w-3 h-3 flex-shrink-0" />
-                            <span className="truncate max-w-[120px]">{currentMemberProfile.member_title}</span>
-                        </span>
-                    )}
-                    <div className="flex items-center gap-1">
-                        <span className={`inline-flex items-center gap-1 font-semibold uppercase tracking-wide rounded-md ${role === 'owner' ? 'text-[11px] px-2 py-1' : 'text-[10px] px-1.5 py-0.5'} ${roleBadgeClasses[role]}`}>
-                            <Shield className={role === 'owner' ? "w-3 h-3" : "w-2.5 h-2.5"} />
-                            {role}
-                        </span>
-                        {role === 'owner' && (
-                            <button
-                                onClick={handleDeleteWorkspace}
-                                className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 dark:hover:text-red-400 rounded-md transition-colors"
-                                title="Delete Workspace"
-                            >
-                                <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                        )}
-                    </div>
-                </div>
-            )}
-
-            {/* Create Workspace Toggle / Form */}
-            {!isCreating ? (
-                <button
-                    onClick={() => setIsCreating(true)}
-                    className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs text-text-muted hover:bg-slate-50 hover:text-text-main dark:hover:bg-slate-800 dark:hover:text-slate-100 transition-all duration-200"
+            {menuOpen && (
+                <div
+                    role="menu"
+                    className="absolute left-0 right-0 top-full mt-2 z-50 p-1.5 rounded-2xl border border-slate-200/80 bg-white/95 dark:border-white/10 dark:bg-dark-surface/95 backdrop-blur-xl shadow-2xl animate-fade-in"
                 >
-                    <Plus className="w-3.5 h-3.5" />
-                    New Workspace
-                </button>
-            ) : (
-                <form onSubmit={handleCreate} className="space-y-2">
-                    <input
-                        type="text"
-                        value={newName}
-                        onChange={(e) => setNewName(e.target.value)}
-                        placeholder="Workspace name…"
-                        autoFocus
-                        disabled={submitting}
-                        className="w-full text-sm px-3 py-2 rounded-xl border border-slate-200 bg-white/50 focus:bg-white focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all outline-none dark:bg-slate-900/50 dark:border-dark-border dark:text-slate-100 dark:focus:bg-dark-surface"
-                    />
-                    <div className="flex items-center gap-2">
-                        <button
-                            type="submit"
-                            disabled={submitting || !newName.trim()}
-                            className="flex-1 flex items-center justify-center gap-1.5 bg-primary text-on-primary text-xs font-medium px-3 py-1.5 rounded-lg transition-all duration-200 hover:bg-primary-hover active:scale-95 disabled:opacity-50 disabled:pointer-events-none"
-                        >
-                            {submitting ? (
-                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                            ) : (
-                                <Plus className="w-3.5 h-3.5" />
-                            )}
-                            Create
-                        </button>
+                    <p className="px-2.5 pt-1.5 pb-1 text-[11px] font-semibold uppercase tracking-wider text-text-muted">Workspaces</p>
+                    <div className="max-h-56 overflow-y-auto">
+                        {workspaces.map((ws) => {
+                            const isActive = ws.id === activeWorkspace?.id;
+                            return (
+                                <button
+                                    key={ws.id}
+                                    type="button"
+                                    role="menuitemradio"
+                                    aria-checked={isActive}
+                                    onClick={() => { setActiveWorkspaceById(ws.id); closeMenu(); }}
+                                    className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-sm text-left text-text-main dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/[0.06] transition-colors"
+                                >
+                                    <span className="w-6 h-6 rounded-lg bg-slate-100 dark:bg-white/[0.08] text-xs font-semibold uppercase flex items-center justify-center flex-shrink-0">
+                                        {ws.name.charAt(0)}
+                                    </span>
+                                    <span className="flex-1 truncate">{ws.name}</span>
+                                    {isActive && <Check className="w-4 h-4 text-primary flex-shrink-0" />}
+                                </button>
+                            );
+                        })}
+                    </div>
+
+                    <div className="my-1.5 h-px bg-slate-200/80 dark:bg-white/10" />
+
+                    {isCreating ? (
+                        <form onSubmit={handleCreate} className="p-1.5 space-y-2">
+                            <input
+                                type="text"
+                                value={newName}
+                                onChange={(e) => setNewName(e.target.value)}
+                                placeholder="Workspace name…"
+                                aria-label="New workspace name"
+                                autoFocus
+                                disabled={submitting}
+                                className="input-field text-sm py-1.5"
+                            />
+                            <div className="flex items-center gap-2">
+                                <button
+                                    type="submit"
+                                    disabled={submitting || !newName.trim()}
+                                    className="flex-1 flex items-center justify-center gap-1.5 bg-primary text-on-primary text-xs font-medium px-3 py-2 rounded-full hover:bg-primary-hover transition-colors disabled:opacity-50 disabled:pointer-events-none"
+                                >
+                                    {submitting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+                                    Create
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => { setIsCreating(false); setNewName(''); }}
+                                    disabled={submitting}
+                                    className="text-xs text-text-muted hover:text-text-main dark:hover:text-slate-100 px-3 py-2 rounded-full hover:bg-slate-100 dark:hover:bg-white/[0.06] transition-colors"
+                                >
+                                    Cancel
+                                </button>
+                            </div>
+                        </form>
+                    ) : (
                         <button
                             type="button"
-                            onClick={() => { setIsCreating(false); setNewName(''); }}
-                            disabled={submitting}
-                            className="text-xs text-text-muted hover:text-text-main dark:hover:text-slate-100 px-2 py-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-all"
+                            role="menuitem"
+                            onClick={() => setIsCreating(true)}
+                            className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-sm text-text-main dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/[0.06] transition-colors"
                         >
-                            Cancel
+                            <Plus className="w-4 h-4 text-primary" />
+                            New workspace
                         </button>
-                    </div>
-                </form>
+                    )}
+
+                    {role === 'owner' && activeWorkspace && !isCreating && (
+                        <button
+                            type="button"
+                            role="menuitem"
+                            onClick={handleDeleteWorkspace}
+                            className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                        >
+                            <Trash2 className="w-4 h-4" />
+                            <span className="truncate">Delete "{activeWorkspace.name}"</span>
+                        </button>
+                    )}
+                </div>
             )}
         </div>
     );

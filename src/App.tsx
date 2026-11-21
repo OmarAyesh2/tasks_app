@@ -448,6 +448,7 @@ function Dashboard() {
           <div className="flex items-center gap-4">
             <button
               onClick={() => setIsMobileMenuOpen(true)}
+              aria-label="Open menu"
               className="md:hidden p-2 -ml-2 text-text-muted hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
             >
               <Menu className="w-6 h-6" />
