@@ -1,10 +1,13 @@
-import { useState } from 'react';
-import { ChevronLeft, ChevronRight, CalendarX2 } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { ChevronLeft, ChevronRight, CalendarX2, StickyNote, X, Plus } from 'lucide-react';
 import {
     DndContext, DragOverlay, KeyboardSensor, PointerSensor, useDraggable, useDroppable, useSensor, useSensors,
     type DragEndEvent, type DragStartEvent,
 } from '@dnd-kit/core';
 import type { Task } from '../types';
+import { supabase } from '../lib/supabase';
+
+export type CalendarNote = { id: string; day: string; body: string; created_by: string; author_email: string | null };
 
 const PRIORITY_DOT = { high: 'bg-red-500', medium: 'bg-amber-400', low: 'bg-primary' } as const;
 const NO_DATE = 'no-date';
@@ -23,16 +26,21 @@ const weekStart = (() => {
 })();
 
 interface CalendarViewProps {
+    workspaceId: string;
     tasks: Task[]; // already filtered by project and member
-    canEdit: boolean;
+    canEdit: boolean; // move tasks and add notes (everyone but viewers)
+    canRemoveNote: (note: CalendarNote) => boolean; // the author, or an owner/admin (same as the database rule)
     onReschedule: (taskId: string, dueDate: string | null) => void;
     onOpen: (task: Task) => void;
 }
 
-export function CalendarView({ tasks, canEdit, onReschedule, onOpen }: CalendarViewProps) {
+export function CalendarView({ workspaceId, tasks, canEdit, canRemoveNote, onReschedule, onOpen }: CalendarViewProps) {
     const [month, setMonth] = useState(() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1); });
     const [selected, setSelected] = useState(todayKey);
     const [dragging, setDragging] = useState<Task | null>(null);
+    const [notes, setNotes] = useState<CalendarNote[]>([]);
+    const [draft, setDraft] = useState('');
+    const [savingNote, setSavingNote] = useState(false);
     const sensors = useSensors(
         useSensor(PointerSensor, { activationConstraint: { distance: 6 } }), // a plain click still opens the task
         useSensor(KeyboardSensor),
@@ -54,6 +62,41 @@ export function CalendarView({ tasks, canEdit, onReschedule, onOpen }: CalendarV
     start.setDate(1 - ((month.getDay() - weekStart + 7) % 7));
     const days = Array.from({ length: 42 }, (_, i) => { const d = new Date(start); d.setDate(start.getDate() + i); return d; });
     const weekdayNames = days.slice(0, 7).map(d => d.toLocaleDateString(undefined, { weekday: 'short' }));
+    const firstKey = keyOf(days[0]);
+    const lastKey = keyOf(days[41]);
+
+    // notes for the six weeks on screen
+    useEffect(() => {
+        let cancelled = false;
+        supabase!.from('calendar_notes').select('id, day, body, created_by, author_email')
+            .eq('workspace_id', workspaceId).gte('day', firstKey).lte('day', lastKey).order('created_at')
+            .then(({ data, error }) => {
+                if (error) console.error('Could not load calendar notes:', error);
+                else if (!cancelled) setNotes(data as CalendarNote[]);
+            });
+        return () => { cancelled = true; };
+    }, [workspaceId, firstKey, lastKey]);
+    const notesByDay = new Map<string, CalendarNote[]>();
+    for (const n of notes) notesByDay.set(n.day, [...(notesByDay.get(n.day) ?? []), n]);
+
+    const addNote = async (e: React.FormEvent) => {
+        e.preventDefault();
+        const body = draft.trim();
+        if (!body) return;
+        setSavingNote(true);
+        const { data, error } = await supabase!.from('calendar_notes')
+            .insert({ workspace_id: workspaceId, day: selected, body })
+            .select('id, day, body, created_by, author_email').single();
+        setSavingNote(false);
+        if (error) { alert('Could not save the note. Please try again.'); return; }
+        setNotes(list => [...list, data as CalendarNote]);
+        setDraft('');
+    };
+    const removeNote = async (note: CalendarNote) => {
+        setNotes(list => list.filter(n => n.id !== note.id));
+        const { error } = await supabase!.from('calendar_notes').delete().eq('id', note.id);
+        if (error) { setNotes(list => [...list, note]); alert('Could not delete the note.'); }
+    };
 
     const shiftMonth = (step: number) => setMonth(m => new Date(m.getFullYear(), m.getMonth() + step, 1));
     const goToday = () => { const d = new Date(); setMonth(new Date(d.getFullYear(), d.getMonth(), 1)); setSelected(todayKey()); };
@@ -68,6 +111,7 @@ export function CalendarView({ tasks, canEdit, onReschedule, onOpen }: CalendarV
     };
 
     const selectedTasks = byDay.get(selected) ?? [];
+    const selectedNotes = notesByDay.get(selected) ?? [];
     const selectedLabel = new Date(selected + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
 
     return (
@@ -104,6 +148,7 @@ export function CalendarView({ tasks, canEdit, onReschedule, onOpen }: CalendarV
                                         isToday={key === today}
                                         isSelected={key === selected}
                                         tasks={byDay.get(key) ?? []}
+                                        notes={notesByDay.get(key) ?? []}
                                         today={today}
                                         canEdit={canEdit}
                                         onSelect={() => setSelected(key)}
@@ -117,6 +162,45 @@ export function CalendarView({ tasks, canEdit, onReschedule, onOpen }: CalendarV
                     {/* selected day: the readable list on phones, a quick summary on desktop */}
                     <section className="mt-6" aria-live="polite">
                         <h3 className="text-sm font-semibold text-text-main dark:text-slate-100 mb-2">{selectedLabel}</h3>
+
+                        {selectedNotes.length > 0 && (
+                            <ul className="space-y-1.5 mb-3" aria-label="Notes">
+                                {selectedNotes.map(n => (
+                                    <li key={n.id} className="flex items-start gap-2.5 rounded-lg px-3 py-2.5 text-sm bg-amber-50 text-amber-900 dark:bg-amber-400/10 dark:text-amber-100">
+                                        <StickyNote className="w-4 h-4 mt-0.5 flex-shrink-0 text-amber-500" />
+                                        <span className="flex-1 min-w-0 break-words">
+                                            {n.body}
+                                            {n.author_email && <span className="block text-xs text-amber-700/70 dark:text-amber-200/60">{n.author_email.split('@')[0]}</span>}
+                                        </span>
+                                        {canRemoveNote(n) && (
+                                            <button type="button" onClick={() => removeNote(n)} aria-label={`Delete note: ${n.body}`}
+                                                className="p-1 -m-1 rounded-full text-amber-600/70 hover:text-red-500 hover:bg-white/60 dark:hover:bg-white/10 transition-colors">
+                                                <X className="w-4 h-4" />
+                                            </button>
+                                        )}
+                                    </li>
+                                ))}
+                            </ul>
+                        )}
+
+                        {canEdit && (
+                            <form onSubmit={addNote} className="flex items-center gap-2 mb-4">
+                                <label htmlFor="calendar-note" className="sr-only">Add a note for {selectedLabel}</label>
+                                <input
+                                    id="calendar-note"
+                                    value={draft}
+                                    onChange={(e) => setDraft(e.target.value)}
+                                    maxLength={500}
+                                    placeholder="Add a note for this day, e.g. Follow up Abdeen"
+                                    className="input-field flex-1 text-sm py-2"
+                                />
+                                <button type="submit" disabled={!draft.trim() || savingNote} aria-label="Add note"
+                                    className="h-10 w-10 flex-shrink-0 rounded-full bg-primary text-on-primary flex items-center justify-center hover:bg-primary-hover transition-colors disabled:opacity-40">
+                                    <Plus className="w-5 h-5" />
+                                </button>
+                            </form>
+                        )}
+
                         {selectedTasks.length === 0 ? (
                             <p className="text-sm text-text-muted">Nothing due this day.</p>
                         ) : (
@@ -141,13 +225,15 @@ const roundButton = 'w-9 h-9 rounded-full flex items-center justify-center text-
 
 interface DayCellProps {
     dateKey: string; day: number; inMonth: boolean; isToday: boolean; isSelected: boolean;
-    tasks: Task[]; today: string; canEdit: boolean; onSelect: () => void; onOpen: (t: Task) => void;
+    tasks: Task[]; notes: CalendarNote[]; today: string; canEdit: boolean; onSelect: () => void; onOpen: (t: Task) => void;
 }
 
-function DayCell({ dateKey, day, inMonth, isToday, isSelected, tasks, today, canEdit, onSelect, onOpen }: DayCellProps) {
+function DayCell({ dateKey, day, inMonth, isToday, isSelected, tasks, notes, today, canEdit, onSelect, onOpen }: DayCellProps) {
     const { setNodeRef, isOver } = useDroppable({ id: dateKey, disabled: !canEdit });
-    const shown = tasks.slice(0, 3);
-    const more = tasks.length - shown.length;
+    // up to 3 lines per day: notes first, then tasks
+    const shownNotes = notes.slice(0, 2);
+    const shown = tasks.slice(0, 3 - shownNotes.length);
+    const more = notes.length + tasks.length - shownNotes.length - shown.length;
     return (
         <div
             ref={setNodeRef}
@@ -161,7 +247,7 @@ function DayCell({ dateKey, day, inMonth, isToday, isSelected, tasks, today, can
             <button
                 type="button"
                 onClick={(e) => { e.stopPropagation(); onSelect(); }}
-                aria-label={`${new Date(dateKey + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}, ${tasks.length} task${tasks.length === 1 ? '' : 's'}`}
+                aria-label={`${new Date(dateKey + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}, ${tasks.length} task${tasks.length === 1 ? '' : 's'}${notes.length ? `, ${notes.length} note${notes.length === 1 ? '' : 's'}` : ''}`}
                 aria-pressed={isSelected}
                 className={[
                     'self-center md:self-start w-7 h-7 rounded-full text-xs font-medium flex items-center justify-center',
@@ -172,12 +258,19 @@ function DayCell({ dateKey, day, inMonth, isToday, isSelected, tasks, today, can
             </button>
 
             {/* phones: dots only; the list below shows the details */}
-            {tasks.length > 0 && (
+            {(tasks.length > 0 || notes.length > 0) && (
                 <div className="md:hidden flex justify-center gap-0.5">
-                    {shown.map(t => <span key={t.id} className={`w-1.5 h-1.5 rounded-full ${t.status === 'done' ? 'bg-slate-400' : t.priority ? PRIORITY_DOT[t.priority] : 'bg-primary'}`} />)}
+                    {notes.length > 0 && <span className="w-1.5 h-1.5 rounded-sm bg-amber-400" />}
+                    {tasks.slice(0, 3).map(t => <span key={t.id} className={`w-1.5 h-1.5 rounded-full ${t.status === 'done' ? 'bg-slate-400' : t.priority ? PRIORITY_DOT[t.priority] : 'bg-primary'}`} />)}
                 </div>
             )}
             <div className="hidden md:flex flex-col gap-1 min-w-0">
+                {shownNotes.map(n => (
+                    <span key={n.id} title={n.body} className="flex items-center gap-1 rounded-lg px-1.5 py-1 text-[11px] bg-amber-100/80 text-amber-900 dark:bg-amber-400/15 dark:text-amber-100">
+                        <StickyNote className="w-3 h-3 flex-shrink-0 text-amber-500" />
+                        <span className="truncate">{n.body}</span>
+                    </span>
+                ))}
                 {shown.map(t => <TaskChip key={t.id} task={t} today={today} canEdit={canEdit} onOpen={onOpen} />)}
                 {more > 0 && (
                     <button type="button" onClick={(e) => { e.stopPropagation(); onSelect(); }} className="text-left px-1.5 text-[11px] font-medium text-text-muted hover:text-text-main dark:hover:text-slate-100">

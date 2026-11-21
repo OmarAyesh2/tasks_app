@@ -16,6 +16,16 @@ import { useAuth } from '../context/AuthContext';
 const chipClass = 'inline-flex items-center gap-1.5 h-7 px-2.5 rounded-full text-xs font-medium border border-slate-200/80 dark:border-white/10 bg-white/60 dark:bg-white/[0.04]';
 const PRIORITY_DOT = { high: 'bg-red-500', medium: 'bg-amber-400', low: 'bg-primary' } as const;
 
+// Status follows the checklist: all ticked = done, some ticked = in progress,
+// none ticked reopens a done task; a task moved to In progress by hand stays there.
+const statusFromSteps = (steps: { done: boolean }[], current: Task['status']): Task['status'] => {
+    if (steps.length === 0) return current;
+    const ticked = steps.filter(s => s.done).length;
+    if (ticked === steps.length) return 'done';
+    if (ticked > 0) return current === 'in_progress' ? current : 'in_progress';
+    return current === 'done' ? 'to_do' : current;
+};
+
 interface TaskCardProps {
     task: Task;
     members: WorkspaceMember[];
@@ -145,18 +155,8 @@ Strictly return a JSON array of sub-task objects formatted exactly like this: [{
         const currentList = task.sub_tasks || [];
         const newList = [...currentList];
         newList[idx] = { ...newList[idx], done: !newList[idx].done };
-
-        let updatedStatus = task.status;
-        if (newList.length > 0) {
-            const allDone = newList.every(step => step.done);
-            if (allDone && task.status !== 'done') {
-                updatedStatus = 'done';
-            } else if (!allDone && task.status === 'done') {
-                updatedStatus = 'to_do';
-            }
-        }
-
-        onUpdateTask(task.id, { sub_tasks: newList, status: updatedStatus });
+        const status = statusFromSteps(newList, task.status);
+        onUpdateTask(task.id, status === task.status ? { sub_tasks: newList } : { sub_tasks: newList, status });
     };
 
     const updateSubTaskText = (idx: number, newText: string) => {
@@ -177,7 +177,8 @@ Strictly return a JSON array of sub-task objects formatted exactly like this: [{
         if (!newStepText.trim()) return;
         const currentList = task.sub_tasks || [];
         const newList = [...currentList, { text: newStepText.trim(), done: false }];
-        onUpdateTask(task.id, { sub_tasks: newList });
+        const status = statusFromSteps(newList, task.status); // a new step reopens a finished task
+        onUpdateTask(task.id, status === task.status ? { sub_tasks: newList } : { sub_tasks: newList, status });
         setNewStepText('');
     };
 

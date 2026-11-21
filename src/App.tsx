@@ -652,12 +652,14 @@ function Dashboard() {
             ) : currentView === 'calendar' ? (
               <div>
                 {memberFilter}
-                <CalendarView
+                {activeWorkspace && <CalendarView
+                  workspaceId={activeWorkspace.id}
                   tasks={tasks.filter(matchesFilters)}
                   canEdit={currentMemberProfile?.permission_role !== 'viewer'}
+                  canRemoveNote={(note) => role === 'owner' || role === 'admin' || (role === 'member' && note.created_by === user.id)}
                   onReschedule={(taskId, dueDate) => handleTaskUpdate(taskId, { due_date: dueDate })}
-                  onOpen={(task) => activeWorkspace && handleOpenTask(activeWorkspace.id, task.id)}
-                />
+                  onOpen={(task) => handleOpenTask(activeWorkspace.id, task.id)}
+                />}
               </div>
             ) : currentView === 'clients' ? (
               <div className="grid grid-cols-1 fold:grid-cols-2 lg:grid-cols-3 gap-6">
