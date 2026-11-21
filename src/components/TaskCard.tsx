@@ -24,9 +24,10 @@ interface TaskCardProps {
     onDelete: () => void;
     isDragging?: boolean;
     dragHandleProps?: React.HTMLAttributes<HTMLElement>;
+    focused?: boolean; // opened from a notification: scroll here, expand and highlight
 }
 
-export function TaskCard({ task, members, onStatusChange, onUpdateTask, onEdit, onDelete, isDragging, dragHandleProps }: TaskCardProps) {
+export function TaskCard({ task, members, onStatusChange, onUpdateTask, onEdit, onDelete, isDragging, dragHandleProps, focused }: TaskCardProps) {
     const { activeWorkspace, currentMemberProfile } = useWorkspace();
     const { user } = useAuth();
     const [isGenerating, setIsGenerating] = useState(false);
@@ -70,6 +71,15 @@ export function TaskCard({ task, members, onStatusChange, onUpdateTask, onEdit, 
     const assignee = members.find(m => m.id === task.assigned_to_member);
     const [viewing, setViewing] = useState<{ files: ViewerFile[]; index: number } | null>(null);
     const [expanded, setExpanded] = useState(false); // collapsed cards keep the list scannable
+    const cardRef = useRef<HTMLElement>(null);
+    useEffect(() => {
+        if (!focused) return;
+        const frame = requestAnimationFrame(() => {
+            setExpanded(true);
+            cardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        });
+        return () => cancelAnimationFrame(frame);
+    }, [focused]);
 
     const totalSteps = task.sub_tasks?.length ?? 0;
     const doneSteps = task.sub_tasks?.filter(s => s.done).length ?? 0;
@@ -308,7 +318,7 @@ Strictly return a JSON array of sub-task objects formatted exactly like this: [{
     const isDone = task.status === 'done';
 
     return (
-        <article className={cn('card-base group relative p-4 sm:p-5 animate-fade-in', isDragging ? 'opacity-50 shadow-lg' : '')}>
+        <article ref={cardRef} className={cn('card-base group relative p-4 sm:p-5 animate-fade-in transition-shadow duration-500', isDragging ? 'opacity-50 shadow-lg' : '', focused ? 'ring-2 ring-primary shadow-glow' : '')}>
             {/* Header: status, title + description, actions */}
             <div className="flex items-start gap-3">
                 <button

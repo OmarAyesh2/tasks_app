@@ -17,6 +17,7 @@ import { WorkTime } from './components/WorkTime';
 import { Plus, Loader2, Menu } from 'lucide-react';
 import { supabase, deleteDriveAttachments, canDeleteFile } from './lib/supabase';
 import { FileBrowser } from './components/FileBrowser';
+import { NotificationBell } from './components/NotificationBell';
 import type { Task, Tool, Project, Client } from './types';
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy, arrayMove, useSortable } from '@dnd-kit/sortable';
@@ -29,6 +30,7 @@ interface SortableTaskCardProps {
   onUpdateTask: (taskId: string, updates: Partial<Task>) => void;
   onEdit: () => void;
   onDelete: () => void;
+  focused?: boolean;
 }
 
 function SortableTaskCard(props: SortableTaskCardProps) {
@@ -54,7 +56,7 @@ function Dashboard() {
   if (!supabase) return null;
 
   const { user, loading: authLoading } = useAuth();
-  const { activeWorkspace, currentMemberProfile, loading: workspaceLoading } = useWorkspace();
+  const { activeWorkspace, currentMemberProfile, loading: workspaceLoading, setActiveWorkspaceById } = useWorkspace();
   const [currentView, setCurrentView] = useState<'tasks' | 'completed' | 'tools' | 'members' | 'work_time' | 'clients' | 'files'>('tasks');
   const [selectedMemberFilter, setSelectedMemberFilter] = useState<string>('all');
 
@@ -76,6 +78,7 @@ function Dashboard() {
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [focusTaskId, setFocusTaskId] = useState<string | null>(null); // opened from a notification
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -233,6 +236,21 @@ function Dashboard() {
       setCurrentView('tasks');
     }
   }, [currentView, activeWorkspace?.enable_client_tracker]);
+
+  // from a notification: switch workspace if needed, clear filters that could hide the task, then scroll to it
+  const handleOpenTask = async (workspaceId: string, taskId: string) => {
+    if (workspaceId !== activeWorkspace?.id) setActiveWorkspaceById(workspaceId);
+    const { data } = await supabase!.from('tasks').select('status').eq('id', taskId).maybeSingle();
+    if (!data) {
+      alert('This task no longer exists.');
+      return;
+    }
+    setCurrentProjectId(null);
+    setSelectedMemberFilter('all');
+    setCurrentView(data.status === 'done' ? 'completed' : 'tasks');
+    setFocusTaskId(taskId);
+    setTimeout(() => setFocusTaskId(id => (id === taskId ? null : id)), 6000);
+  };
 
   const handleTaskStatusChange = async (task: Task) => {
     handleTaskUpdate(task.id, { status: task.status === 'to_do' ? 'done' : 'to_do' });
@@ -488,6 +506,8 @@ function Dashboard() {
             </div>
           </div>
 
+          <div className="flex items-center gap-2 w-full fold:w-auto md:w-auto">
+          <NotificationBell onOpenTask={handleOpenTask} />
           {currentView !== 'members' && currentView !== 'work_time' && currentView !== 'files' && currentMemberProfile?.permission_role !== 'viewer' && (
             <button
               onClick={() => {
@@ -502,12 +522,13 @@ function Dashboard() {
                   setIsTaskModalOpen(true);
                 }
               }}
-              className="btn-primary flex items-center gap-2 shadow-lg hover:shadow-primary/20 w-full fold:w-auto md:w-auto justify-center"
+              className="btn-primary flex items-center gap-2 shadow-lg hover:shadow-primary/20 flex-1 fold:flex-none justify-center"
             >
               <Plus className="w-5 h-5" />
               Add {currentView === 'tools' ? 'Resource' : currentView === 'clients' ? 'Client' : 'Task'}
             </button>
           )}
+          </div>
         </header>
 
         {isInitialLoad ? (
@@ -635,6 +656,7 @@ function Dashboard() {
                             setIsTaskModalOpen(true);
                           }}
                           onDelete={() => handleDeleteTask(task)}
+                          focused={focusTaskId === task.id}
                         />
                       ))}
                     </SortableContext>
@@ -652,6 +674,7 @@ function Dashboard() {
                         setIsTaskModalOpen(true);
                       }}
                       onDelete={() => handleDeleteTask(task)}
+                      focused={focusTaskId === task.id}
                     />
                   ))
                 )}
