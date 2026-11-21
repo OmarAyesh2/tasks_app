@@ -8,7 +8,7 @@ export default {
     theme: {
         extend: {
             fontFamily: {
-                sans: ['Inter', 'sans-serif'],
+                sans: ['Poppins', 'sans-serif'],
             },
             screens: {
                 fold: '720px',
