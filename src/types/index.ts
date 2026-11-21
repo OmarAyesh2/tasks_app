@@ -3,7 +3,7 @@ export type User = {
     email?: string;
 };
 
-export type TaskStatus = 'to_do' | 'done';
+export type TaskStatus = 'to_do' | 'in_progress' | 'done';
 
 export type Project = {
     id: string;
@@ -42,6 +42,8 @@ export type Task = {
     status: TaskStatus;
     links: Link[] | null;
     user_id: string;
+    created_by?: string | null;
+    updated_at?: string;
     project_id?: string | null;
     assigned_to_member?: string | null;
     sub_tasks?: SubTask[] | null;

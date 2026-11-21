@@ -384,8 +384,14 @@ Strictly return a JSON array of sub-task objects formatted exactly like this: [{
             </div>
 
             {/* Meta chips: due, priority, client, assignee */}
-            {(dueInfo || task.priority || task.client || assignee) && (
+            {(dueInfo || task.priority || task.client || assignee || task.status === 'in_progress') && (
                 <div className="mt-3 pl-10 flex flex-wrap items-center gap-1.5">
+                    {task.status === 'in_progress' && (
+                        <span className={cn(chipClass, 'text-accent border-accent/30 bg-accent/10')}>
+                            <span className="w-2 h-2 rounded-full bg-accent animate-pulse motion-reduce:animate-none" />
+                            In progress
+                        </span>
+                    )}
                     {dueInfo && (
                         <span className={cn(chipClass, dueInfo.tone)}>
                             <CalendarDays className="w-3.5 h-3.5" />

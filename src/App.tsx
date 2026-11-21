@@ -14,11 +14,12 @@ import { ClientModal } from './components/ClientModal';
 import { ConfirmModal } from './components/ConfirmModal';
 import { MemberManagement } from './components/MemberManagement';
 import { WorkTime } from './components/WorkTime';
-import { Plus, Loader2, Menu } from 'lucide-react';
+import { Plus, Loader2, Menu, List, Columns3 } from 'lucide-react';
 import { supabase, deleteDriveAttachments, canDeleteFile } from './lib/supabase';
 import { FileBrowser } from './components/FileBrowser';
 import { NotificationBell } from './components/NotificationBell';
 import { CalendarView } from './components/CalendarView';
+import { KanbanBoard } from './components/KanbanBoard';
 import type { Task, Tool, Project, Client } from './types';
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy, arrayMove, useSortable } from '@dnd-kit/sortable';
@@ -80,6 +81,13 @@ function Dashboard() {
 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [focusTaskId, setFocusTaskId] = useState<string | null>(null); // opened from a notification
+  const [taskLayout, setTaskLayout] = useState<'list' | 'board'>(() => {
+    try { return localStorage.getItem('task_layout') === 'board' ? 'board' : 'list'; } catch { return 'list'; }
+  });
+  const changeTaskLayout = (layout: 'list' | 'board') => {
+    setTaskLayout(layout);
+    try { localStorage.setItem('task_layout', layout); } catch { /* private mode: just don't remember */ }
+  };
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -248,13 +256,14 @@ function Dashboard() {
     }
     setCurrentProjectId(null);
     setSelectedMemberFilter('all');
+    changeTaskLayout('list');
     setCurrentView(data.status === 'done' ? 'completed' : 'tasks');
     setFocusTaskId(taskId);
     setTimeout(() => setFocusTaskId(id => (id === taskId ? null : id)), 6000);
   };
 
   const handleTaskStatusChange = async (task: Task) => {
-    handleTaskUpdate(task.id, { status: task.status === 'to_do' ? 'done' : 'to_do' });
+    handleTaskUpdate(task.id, { status: task.status === 'done' ? 'to_do' : 'done' });
   };
 
   const handleTaskUpdate = async (taskId: string, updates: Partial<Task>) => {
@@ -400,7 +409,7 @@ function Dashboard() {
     if (selectedMemberFilter !== 'all') return t.assigned_to_member === selectedMemberFilter;
     return true;
   };
-  const filteredTasks = tasks.filter(t => matchesFilters(t) && (currentView === 'tasks' ? t.status === 'to_do' : t.status === 'done'));
+  const filteredTasks = tasks.filter(t => matchesFilters(t) && (currentView === 'tasks' ? t.status !== 'done' : t.status === 'done'));
 
   const memberFilter = (currentMemberProfile?.permission_role === 'owner' || currentMemberProfile?.permission_role === 'admin') && (
     <div className="flex justify-end mb-4">
@@ -646,8 +655,41 @@ function Dashboard() {
                 </div>
               </div>
             ) : (
-              <div className="max-w-3xl xl:max-w-4xl">
-                {memberFilter}
+              <div className={currentView === 'tasks' && taskLayout === 'board' ? '' : 'max-w-3xl xl:max-w-4xl'}>
+                {currentView === 'tasks' ? (
+                  <div className="flex flex-wrap items-center gap-3 mb-4">
+                    <div role="group" aria-label="Task layout" className="inline-flex p-1 rounded-full border border-slate-200/80 dark:border-white/10 bg-white/50 dark:bg-white/[0.03]">
+                      {([['list', 'List', List], ['board', 'Board', Columns3]] as const).map(([id, label, Icon]) => (
+                        <button
+                          key={id}
+                          type="button"
+                          onClick={() => changeTaskLayout(id)}
+                          aria-pressed={taskLayout === id}
+                          className={`inline-flex items-center gap-1.5 h-8 px-3.5 rounded-full text-sm font-medium transition-colors ${
+                            taskLayout === id ? 'bg-primary text-on-primary' : 'text-text-muted hover:text-text-main dark:hover:text-slate-100'
+                          }`}
+                        >
+                          <Icon className="w-4 h-4" /> {label}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="flex-1 [&>div]:mb-0">{memberFilter}</div>
+                  </div>
+                ) : memberFilter}
+
+                {currentView === 'tasks' && taskLayout === 'board' ? (
+                  <KanbanBoard
+                    tasks={tasks.filter(matchesFilters)}
+                    members={members}
+                    canMove={(t) => {
+                      const role = currentMemberProfile?.permission_role;
+                      return role === 'owner' || role === 'admin' || (role === 'member' && t.created_by === user.id);
+                    }}
+                    onMove={(taskId, status) => handleTaskUpdate(taskId, { status })}
+                    onOpen={(task) => activeWorkspace && handleOpenTask(activeWorkspace.id, task.id)}
+                    onShowCompleted={() => setCurrentView('completed')}
+                  />
+                ) : (
 
                 <div className="space-y-4">
                   {filteredTasks.length === 0 ? (
@@ -692,6 +734,7 @@ function Dashboard() {
                   ))
                 )}
                 </div>
+                )}
               </div>
             )}
           </>
