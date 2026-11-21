@@ -64,7 +64,8 @@ export function Sidebar({ currentView, onViewChange, isOpen, onClose, projects, 
             )}>
                 <div className="p-6 border-b border-slate-200/50 dark:border-dark-border/50">
                     <div className="flex items-center justify-between mb-4">
-                        <h1 className="text-xl font-bold bg-gradient-to-r from-primary to-primary-hover bg-clip-text text-transparent">
+                        <h1 className="flex items-center gap-2.5 text-lg font-semibold tracking-wide text-text-main dark:text-slate-100">
+                            <img src="/logo.svg" alt="" className="w-8 h-8" />
                             Workspace
                         </h1>
                         <button
@@ -79,7 +80,7 @@ export function Sidebar({ currentView, onViewChange, isOpen, onClose, projects, 
                 </div>
 
                 <div className="flex-1 overflow-y-auto min-h-0 flex flex-col">
-                    <nav className="p-4 space-y-2 flex-shrink-0">
+                    <nav aria-label="Main" className="p-4 space-y-1.5 flex-shrink-0">
                     {navItems.map((item) => {
                         const Icon = item.icon;
                         const isActive = currentView === item.id;
@@ -88,15 +89,24 @@ export function Sidebar({ currentView, onViewChange, isOpen, onClose, projects, 
                             <button
                                 key={item.id}
                                 onClick={() => onViewChange(item.id)}
+                                aria-current={isActive ? 'page' : undefined}
                                 className={cn(
-                                    "w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group relative overflow-hidden",
+                                    "w-full flex items-center gap-3 p-1.5 pr-4 rounded-full transition-all duration-200 group",
                                     isActive
-                                        ? "bg-primary/10 text-primary font-medium"
-                                        : "text-text-muted hover:bg-slate-50 hover:text-text-main dark:hover:bg-slate-800 dark:hover:text-slate-100"
+                                        ? "bg-primary/10 text-text-main font-medium dark:bg-white/[0.06] dark:text-slate-100"
+                                        : "text-text-muted hover:bg-slate-100/70 hover:text-text-main dark:hover:bg-white/[0.04] dark:hover:text-slate-100"
                                 )}
                             >
-                                <Icon className={cn("w-5 h-5 transition-colors", isActive ? "text-primary" : "text-text-muted group-hover:text-text-main dark:group-hover:text-slate-100")} />
-                                <span className="relative z-10">{item.label}</span>
+                                {/* round icon badge; the active one gets the brand gradient and glow */}
+                                <span className={cn(
+                                    "w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 transition-all duration-200",
+                                    isActive
+                                        ? "bg-gradient-to-br from-primary to-accent text-on-primary shadow-glow"
+                                        : "bg-slate-100 text-text-muted group-hover:text-text-main dark:bg-white/[0.06] dark:group-hover:text-slate-100"
+                                )}>
+                                    <Icon className="w-[18px] h-[18px]" />
+                                </span>
+                                <span className="text-sm">{item.label}</span>
                             </button>
                         );
                     })}
@@ -166,17 +176,21 @@ export function Sidebar({ currentView, onViewChange, isOpen, onClose, projects, 
                 <div className="p-4 border-t border-slate-200/50 dark:border-dark-border/50 space-y-2 flex-shrink-0">
                     <button
                         onClick={toggleTheme}
-                        className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-text-muted hover:bg-slate-50 hover:text-text-main dark:hover:bg-slate-800 dark:hover:text-slate-100 transition-all duration-200"
+                        className="w-full flex items-center gap-3 p-1.5 pr-4 rounded-full text-sm text-text-muted hover:bg-slate-100/70 hover:text-text-main dark:hover:bg-white/[0.04] dark:hover:text-slate-100 transition-all duration-200"
                     >
-                        {theme === 'light' ? <Moon className="w-5 h-5" /> : <Sun className="w-5 h-5" />}
+                        <span className="w-9 h-9 rounded-full flex items-center justify-center bg-slate-100 dark:bg-white/[0.06]">
+                            {theme === 'light' ? <Moon className="w-[18px] h-[18px]" /> : <Sun className="w-[18px] h-[18px]" />}
+                        </span>
                         {theme === 'light' ? 'Dark Mode' : 'Light Mode'}
                     </button>
 
                     <button
                         onClick={() => signOut()}
-                        className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-text-muted hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20 transition-all duration-200"
+                        className="w-full flex items-center gap-3 p-1.5 pr-4 rounded-full text-sm text-text-muted hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20 dark:hover:text-red-400 transition-all duration-200"
                     >
-                        <LogOut className="w-5 h-5" />
+                        <span className="w-9 h-9 rounded-full flex items-center justify-center bg-slate-100 dark:bg-white/[0.06]">
+                            <LogOut className="w-[18px] h-[18px]" />
+                        </span>
                         Sign Out
                     </button>
                 </div>

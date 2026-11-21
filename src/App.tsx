@@ -364,7 +364,7 @@ function Dashboard() {
 
   if (authLoading || workspaceLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
+      <div className="min-h-screen flex items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin text-primary" />
       </div>
     );
@@ -421,7 +421,7 @@ function Dashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-background dark:bg-dark-bg text-text-main dark:text-slate-100 font-sans transition-colors duration-300">
+    <div className="min-h-screen text-text-main dark:text-slate-100 font-sans transition-colors duration-300">
       <Sidebar
         currentView={currentView}
         onViewChange={(view) => {

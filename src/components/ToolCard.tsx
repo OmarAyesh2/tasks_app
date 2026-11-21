@@ -22,7 +22,7 @@ export function ToolCard({ tool, onEdit, onDelete }: ToolCardProps) {
             href={tool.link}
             target="_blank"
             rel="noopener noreferrer"
-            className="group block relative bg-white dark:bg-dark-surface rounded-2xl p-6 border border-slate-100 dark:border-dark-border shadow-soft hover:shadow-soft-hover dark:shadow-none dark:hover:bg-slate-800 transition-all duration-300 animate-fade-in"
+            className="card-base group block relative p-6 animate-fade-in"
         >
             <div className="absolute bottom-4 right-4 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-all duration-200 z-10">
                 <button
@@ -59,7 +59,7 @@ export function ToolCard({ tool, onEdit, onDelete }: ToolCardProps) {
                         }}
                     />
                 </div>
-                <div className="p-2 rounded-full bg-slate-50 dark:bg-slate-800 text-text-muted group-hover:bg-primary group-hover:text-white transition-colors duration-300">
+                <div className="p-2 rounded-full bg-slate-50 dark:bg-slate-800 text-text-muted group-hover:bg-primary group-hover:text-on-primary transition-colors duration-300">
                     <ArrowUpRight className="w-4 h-4" />
                 </div>
             </div>

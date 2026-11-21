@@ -538,7 +538,7 @@ export function AddTaskModal({ isOpen, onClose, onSuccess, tools, members, taskT
                                             >
                                                 <div className={`w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors ${
                                                     isSelected
-                                                        ? 'bg-primary border-primary text-white'
+                                                        ? 'bg-primary border-primary text-on-primary'
                                                         : 'border-slate-300 dark:border-slate-600'
                                                 }`}>
                                                     {isSelected && (
@@ -608,7 +608,7 @@ export function AddTaskModal({ isOpen, onClose, onSuccess, tools, members, taskT
                                     type="button"
                                     onClick={handleAddInlineTool}
                                     disabled={!inlineToolName || !inlineToolLink}
-                                    className="px-3 py-1.5 text-xs bg-primary text-white rounded-md font-medium disabled:opacity-40 hover:bg-primary-hover transition-colors"
+                                    className="px-3 py-1.5 text-xs bg-primary text-on-primary rounded-md font-medium disabled:opacity-40 hover:bg-primary-hover transition-colors"
                                 >
                                     Add Resource
                                 </button>

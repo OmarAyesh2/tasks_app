@@ -5,33 +5,89 @@
 @tailwind utilities;
 
 @layer base {
+  /* Brand palette as RGB channels (see tailwind.config.js). Light mode uses deeper
+     shades of the same hues so text and white-on-blue buttons keep 4.5:1 contrast. */
+  :root {
+    --c-primary: 31 111 209;       /* #1F6FD1 */
+    --c-primary-hover: 24 92 176;  /* #185CB0 */
+    --c-on-primary: 255 255 255;
+    --c-accent: 124 92 224;        /* #7C5CE0 */
+    --c-bg: 242 253 255;           /* #F2FDFF */
+    --c-surface: 255 255 255;
+    --c-text: 5 15 42;             /* #050F2A */
+    --c-muted: 91 91 91;           /* #5B5B5B */
+  }
+
+  .dark {
+    --c-primary: 123 187 255;      /* #7BBBFF */
+    --c-primary-hover: 160 206 255;
+    --c-on-primary: 5 15 42;       /* navy text on the light blue */
+    --c-accent: 184 169 255;       /* #B8A9FF */
+    --c-bg: 1 8 15;                /* #01080F */
+    --c-surface: 7 20 51;          /* #071433 */
+    --c-text: 242 253 255;         /* #F2FDFF */
+    --c-muted: 160 160 160;        /* #A0A0A0 */
+    color-scheme: dark;            /* native date pickers, selects and scrollbars follow */
+  }
+
   body {
     @apply bg-background text-text-main font-sans antialiased transition-colors duration-300;
+    background-image:
+      radial-gradient(60rem 40rem at 100% -10%, rgb(123 187 255 / 0.18), transparent 60%),
+      radial-gradient(50rem 35rem at -10% 110%, rgb(184 169 255 / 0.16), transparent 60%);
+    background-attachment: fixed;
   }
 
   .dark body {
-    @apply bg-dark-bg text-slate-100;
+    @apply text-slate-100;
+    background-image:
+      radial-gradient(60rem 40rem at 100% -10%, rgb(123 187 255 / 0.16), transparent 60%),
+      radial-gradient(50rem 35rem at -10% 110%, rgb(184 169 255 / 0.12), transparent 60%),
+      linear-gradient(180deg, #050F2A 0%, #01080F 70%);
+  }
+
+  /* one visible focus style for keyboard users everywhere */
+  :focus-visible {
+    outline: 2px solid rgb(var(--c-primary));
+    outline-offset: 2px;
+  }
+
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(var(--c-muted) / 0.35) transparent;
+  }
+
+  ::selection {
+    background: rgb(var(--c-primary) / 0.3);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
   }
 }
 
 @layer components {
   .glass-panel {
-    @apply bg-white/70 backdrop-blur-md border border-white/20 shadow-xl dark:bg-dark-surface/80 dark:border-dark-border/60;
+    @apply bg-white/70 backdrop-blur-xl border border-white/60 shadow-soft dark:bg-dark-surface/60 dark:border-white/10 dark:shadow-none;
   }
 
   .glass-sidebar {
-    @apply bg-white/80 backdrop-blur-lg border-r border-slate-200/60 dark:bg-[#0A1628] dark:border-[#1A3A5C];
+    /* near-solid on phones, where it slides over content; glass on desktop */
+    @apply bg-white/95 md:bg-white/70 backdrop-blur-xl border-r border-slate-200/70 dark:bg-dark-surface/95 md:dark:bg-dark-surface/50 dark:border-white/10;
   }
 
   .btn-primary {
-    @apply bg-primary text-white px-4 py-2 rounded-lg font-medium transition-all duration-200 hover:bg-primary-hover hover:shadow-lg active:scale-95 hover:shadow-glow;
+    @apply bg-primary text-on-primary px-5 py-2 rounded-full font-medium transition-all duration-200 hover:bg-primary-hover hover:shadow-glow active:scale-[0.97];
   }
 
   .input-field {
-    @apply w-full px-4 py-2 rounded-lg border border-slate-200 bg-white/60 focus:bg-white focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all outline-none dark:bg-[#0A1628] dark:border-dark-border dark:text-slate-100 dark:focus:bg-dark-surface dark:focus:border-primary;
+    @apply w-full px-4 py-2 rounded-xl border border-slate-200 bg-white/70 text-text-main placeholder:text-text-muted/70 focus:bg-white focus:border-primary focus:ring-2 focus:ring-primary/25 transition-all outline-none dark:bg-white/5 dark:border-white/10 dark:focus:bg-white/10 dark:focus:border-primary;
   }
 
   .card-base {
-    @apply bg-white rounded-xl border border-slate-100 shadow-soft hover:shadow-soft-hover transition-all duration-300 dark:bg-dark-surface dark:border-dark-border dark:shadow-none dark:hover:border-[#1A3A5C] dark:hover:bg-[#0F1E35];
+    @apply bg-white/80 backdrop-blur-xl rounded-2xl border border-slate-200/70 shadow-soft hover:shadow-soft-hover transition-all duration-300 dark:bg-dark-surface/60 dark:border-white/10 dark:shadow-none dark:hover:border-primary/40 dark:hover:bg-dark-surface/80;
   }
 }

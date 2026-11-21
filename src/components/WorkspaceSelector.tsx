@@ -162,7 +162,7 @@ export function WorkspaceSelector() {
                         <button
                             type="submit"
                             disabled={submitting || !newName.trim()}
-                            className="flex-1 flex items-center justify-center gap-1.5 bg-primary text-white text-xs font-medium px-3 py-1.5 rounded-lg transition-all duration-200 hover:bg-primary-hover active:scale-95 disabled:opacity-50 disabled:pointer-events-none"
+                            className="flex-1 flex items-center justify-center gap-1.5 bg-primary text-on-primary text-xs font-medium px-3 py-1.5 rounded-lg transition-all duration-200 hover:bg-primary-hover active:scale-95 disabled:opacity-50 disabled:pointer-events-none"
                         >
                             {submitting ? (
                                 <Loader2 className="w-3.5 h-3.5 animate-spin" />

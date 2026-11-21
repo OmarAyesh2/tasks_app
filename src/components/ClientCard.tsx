@@ -96,7 +96,7 @@ export function ClientCard({ client, onEdit, onDelete }: ClientCardProps) {
     ];
 
     return (
-        <div className="group relative bg-white dark:bg-dark-surface rounded-2xl p-5 border border-slate-100 dark:border-dark-border shadow-soft hover:shadow-soft-hover dark:shadow-none dark:hover:bg-slate-800/80 transition-all duration-300 animate-fade-in">
+        <div className="card-base group relative p-5 animate-fade-in">
             {/* Action buttons — revealed on hover */}
             <div className="absolute top-4 right-4 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all duration-200">
                 <button
@@ -164,7 +164,7 @@ export function ClientCard({ client, onEdit, onDelete }: ClientCardProps) {
             )}
 
             {/* Social Links Row */}
-            <div className={`flex items-center gap-1.5 pt-3 ${!client.notes ? 'border-t border-slate-100 dark:border-dark-border/50' : ''}`}>
+            <div className={`flex flex-wrap items-center gap-1 pt-3 ${!client.notes ? 'border-t border-slate-100 dark:border-dark-border/50' : ''}`}>
                 {socialLinks.map(({ key, icon, url }) =>
                     url ? (
                         <a
@@ -174,6 +174,7 @@ export function ClientCard({ client, onEdit, onDelete }: ClientCardProps) {
                             rel="noopener noreferrer"
                             className="p-2 rounded-lg text-text-muted dark:text-slate-400 hover:text-primary hover:bg-primary/10 dark:hover:bg-primary/20 transition-all duration-200"
                             title={key.charAt(0).toUpperCase() + key.slice(1)}
+                            aria-label={key.charAt(0).toUpperCase() + key.slice(1)}
                         >
                             {icon}
                         </a>

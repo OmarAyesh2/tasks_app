@@ -213,7 +213,7 @@ export function MemberManagement() {
                         onClick={handleToggleTimeTracking}
                         disabled={updatingTracking}
                         className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary/50 focus:ring-offset-2 ${
-                            activeWorkspace.time_tracking_enabled ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-600'
+                            activeWorkspace.time_tracking_enabled ? 'bg-primary' : 'bg-slate-300 dark:bg-slate-600'
                         } ${updatingTracking ? 'opacity-50 cursor-not-allowed' : ''}`}
                         role="switch"
                         aria-checked={!!activeWorkspace.time_tracking_enabled}
@@ -269,7 +269,7 @@ export function MemberManagement() {
                         }}
                         disabled={updatingClientTracker}
                         className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary/50 focus:ring-offset-2 ${
-                            activeWorkspace.enable_client_tracker ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-600'
+                            activeWorkspace.enable_client_tracker ? 'bg-primary' : 'bg-slate-300 dark:bg-slate-600'
                         } ${updatingClientTracker ? 'opacity-50 cursor-not-allowed' : ''}`}
                         role="switch"
                         aria-checked={!!activeWorkspace.enable_client_tracker}

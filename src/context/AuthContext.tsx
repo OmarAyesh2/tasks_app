@@ -50,7 +50,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     if (!supabase) {
         return (
-            <div className="flex flex-col items-center justify-center min-h-screen bg-background p-4">
+            <div className="flex flex-col items-center justify-center min-h-screen p-4">
                 <div className="max-w-md w-full p-8 bg-white rounded-2xl shadow-xl border border-slate-100 text-center">
                     <h2 className="text-2xl font-bold text-slate-800 mb-4">Configuration Required</h2>
                     <p className="text-slate-600 mb-6">

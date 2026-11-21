@@ -47,7 +47,7 @@ export function Modal({ isOpen, onClose, title, children, footer, size = 'md', c
     return createPortal(
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
             <div
-                className="absolute inset-0 bg-black/20 backdrop-blur-sm transition-opacity"
+                className="absolute inset-0 bg-slate-950/30 dark:bg-black/50 backdrop-blur-sm transition-opacity"
                 onClick={requestClose}
             />
             <div
@@ -55,7 +55,7 @@ export function Modal({ isOpen, onClose, title, children, footer, size = 'md', c
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby={titleId}
-                className={`relative w-full ${size === 'lg' ? 'max-w-2xl' : 'max-w-lg'} bg-white dark:bg-dark-surface rounded-2xl shadow-2xl animate-fade-in border border-slate-100 dark:border-dark-border max-h-[90vh] flex flex-col`}
+                className={`relative w-full ${size === 'lg' ? 'max-w-2xl' : 'max-w-lg'} bg-white/95 dark:bg-dark-surface/90 backdrop-blur-2xl rounded-3xl shadow-2xl dark:shadow-[0_24px_80px_-12px_rgb(123_187_255/0.25)] animate-fade-in border border-slate-200/70 dark:border-white/10 max-h-[90vh] flex flex-col`}
             >
                 <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 dark:border-dark-border flex-shrink-0">
                     <h2 id={titleId} className="text-xl font-semibold text-text-main dark:text-slate-100">{title}</h2>

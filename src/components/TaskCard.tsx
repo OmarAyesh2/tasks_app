@@ -284,7 +284,7 @@ Strictly return a JSON array of sub-task objects formatted exactly like this: [{
     const isDone = task.status === 'done';
 
     return (
-        <div className={`group relative bg-white dark:bg-dark-surface rounded-xl p-5 border border-slate-100 dark:border-dark-border shadow-soft hover:shadow-soft-hover dark:shadow-none dark:hover:bg-slate-800 transition-all duration-300 animate-fade-in pr-5 md:pr-14${isDragging ? ' opacity-50 shadow-lg' : ''}`}>
+        <div className={`card-base group relative p-5 animate-fade-in pr-5 md:pr-14${isDragging ? ' opacity-50 shadow-lg' : ''}`}>
             <div className="absolute top-4 right-4 flex flex-col gap-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-all duration-200">
                 <button
                     type="button"

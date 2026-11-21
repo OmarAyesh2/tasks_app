@@ -1,4 +1,8 @@
 /** @type {import('tailwindcss').Config} */
+// Theme colors come from CSS variables in src/index.css (:root = light, .dark = dark),
+// so one class like `bg-primary` follows the active theme.
+const themed = (name) => `rgb(var(--c-${name}) / <alpha-value>)`;
+
 export default {
     content: [
         "./index.html",
@@ -14,26 +18,36 @@ export default {
                 fold: '720px',
             },
             boxShadow: {
-                'soft': '0 4px 24px -2px rgba(0, 0, 0, 0.07)',
-                'soft-hover': '0 12px 32px -4px rgba(8, 145, 178, 0.15), 0 4px 12px -2px rgba(0, 0, 0, 0.08)',
-                'glow': '0 0 20px rgba(8, 145, 178, 0.4)',
+                'soft': '0 4px 24px -2px rgb(5 15 42 / 0.07)',
+                'soft-hover': '0 12px 32px -4px rgb(var(--c-primary) / 0.18), 0 4px 12px -2px rgb(5 15 42 / 0.08)',
+                'glow': '0 0 24px rgb(var(--c-primary) / 0.45)',
             },
             colors: {
-                background: '#F8FBFF',
-                surface: '#FFFFFF',
+                background: themed('bg'),
+                surface: themed('surface'),
                 primary: {
-                    DEFAULT: '#0891B2',
-                    hover: '#0E7490',
+                    DEFAULT: themed('primary'),
+                    hover: themed('primary-hover'),
                 },
+                'on-primary': themed('on-primary'), // text on primary fills
+                accent: themed('accent'),           // lavender
                 text: {
-                    main: '#0F172A',
-                    muted: '#475569',
+                    main: themed('text'),
+                    muted: themed('muted'),
                 },
+                // brand dark surfaces (used with dark: variants)
                 dark: {
-                    bg: '#050D1A',
-                    surface: '#0A1628',
-                    border: '#1A3A5C',
-                }
+                    bg: '#01080F',
+                    surface: '#071433',
+                    border: '#1C2C52',
+                },
+                // navy-tinted dark greys so existing slate-700/800/900 surfaces match the palette
+                slate: {
+                    700: '#1C2C52',
+                    800: '#0D1B3E',
+                    900: '#071433',
+                    950: '#050F2A',
+                },
             },
             animation: {
                 'fade-in': 'fadeIn 0.3s ease-out',

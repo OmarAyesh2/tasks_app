@@ -41,7 +41,7 @@ export function Auth() {
     };
 
     return (
-        <div className="flex items-center justify-center min-h-screen bg-background">
+        <div className="flex items-center justify-center min-h-screen">
             <div className="w-full max-w-md p-8 glass-panel rounded-2xl animate-fade-in">
                 <h2 className="text-3xl font-bold text-center text-text-main mb-2">
                     {isSignUp ? 'Create Account' : 'Welcome Back'}
