@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import type { Task, TaskComment, TaskAsset } from '../types';
 import { ConfirmModal } from './ConfirmModal';
-import { Check, Link as LinkIcon, ExternalLink, Trash2, Library, Pencil, Loader2, Sparkles, Plus, X, Paperclip, File as FileIcon, FolderOpen, User as UserIcon, GripVertical, MessageSquare, Send, ContactRound } from 'lucide-react';
+import { Check, Link as LinkIcon, ExternalLink, Trash2, Library, Pencil, Loader2, Sparkles, Plus, X, Paperclip, File as FileIcon, FolderOpen, GripVertical, MessageSquare, Send, ContactRound, ChevronDown, CalendarDays } from 'lucide-react';
 import { supabase, canDeleteFile, driveFileId, openDriveFile } from '../lib/supabase';
 import { FileBrowser, type DriveItem } from './FileBrowser';
 import { Modal } from './Modal';
@@ -9,6 +9,10 @@ import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { useWorkspace, type WorkspaceMember } from '../context/WorkspaceContext';
 import { useAuth } from '../context/AuthContext';
+
+// one chip shape for every piece of task metadata; color only where it carries meaning
+const chipClass = 'inline-flex items-center gap-1.5 h-7 px-2.5 rounded-full text-xs font-medium border border-slate-200/80 dark:border-white/10 bg-white/60 dark:bg-white/[0.04]';
+const PRIORITY_DOT = { high: 'bg-red-500', medium: 'bg-amber-400', low: 'bg-primary' } as const;
 
 interface TaskCardProps {
     task: Task;
@@ -63,6 +67,19 @@ export function TaskCard({ task, members, onStatusChange, onUpdateTask, onEdit, 
     }, [showComments]);
 
     const assignee = members.find(m => m.id === task.assigned_to_member);
+    const [expanded, setExpanded] = useState(false); // collapsed cards keep the list scannable
+
+    const totalSteps = task.sub_tasks?.length ?? 0;
+    const doneSteps = task.sub_tasks?.filter(s => s.done).length ?? 0;
+
+    const dueInfo = (() => {
+        if (!task.due_date) return null;
+        const todayStr = new Date().toLocaleDateString('en-CA');
+        const formatted = new Date(task.due_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        if (task.due_date < todayStr && task.status !== 'done') return { label: `Overdue · ${formatted}`, tone: 'text-red-600 dark:text-red-400 border-red-200 dark:border-red-500/30 bg-red-50 dark:bg-red-500/10' };
+        if (task.due_date === todayStr) return { label: 'Due today', tone: 'text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/10' };
+        return { label: formatted, tone: 'text-text-muted dark:text-slate-300' };
+    })();
 
     function cn(...inputs: string[]) {
         return twMerge(clsx(inputs));
@@ -284,118 +301,151 @@ Strictly return a JSON array of sub-task objects formatted exactly like this: [{
     const isDone = task.status === 'done';
 
     return (
-        <div className={`card-base group relative p-5 animate-fade-in pr-5 md:pr-14${isDragging ? ' opacity-50 shadow-lg' : ''}`}>
-            <div className="absolute top-4 right-4 flex flex-col gap-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-all duration-200">
+        <article className={cn('card-base group relative p-4 sm:p-5 animate-fade-in', isDragging ? 'opacity-50 shadow-lg' : '')}>
+            {/* Header: status, title + description, actions */}
+            <div className="flex items-start gap-3">
                 <button
                     type="button"
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        onEdit();
-                    }}
-                    className="p-1.5 text-slate-400 hover:text-primary hover:bg-primary/10 rounded-lg transition-colors"
-                    title="Edit task"
+                    onClick={() => onStatusChange(task)}
+                    aria-label={isDone ? `Mark "${task.name}" as not done` : `Mark "${task.name}" as done`}
+                    aria-pressed={isDone}
+                    className={cn(
+                        "mt-0.5 w-7 h-7 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all duration-200 active:scale-90",
+                        isDone
+                            ? "bg-green-500 border-green-500 text-white"
+                            : "border-slate-300 dark:border-white/20 hover:border-primary text-transparent hover:text-primary/40"
+                    )}
                 >
-                    <Pencil className="w-4 h-4" />
+                    <Check className="w-4 h-4" strokeWidth={3} />
                 </button>
+
+                <div className="flex-1 min-w-0">
+                    <h3 className={cn(
+                        "text-base sm:text-[17px] font-semibold leading-snug tracking-[-0.01em] break-words transition-colors",
+                        isDone ? "text-text-muted line-through" : "text-text-main dark:text-slate-100"
+                    )}>
+                        {task.name}
+                    </h3>
+                    {task.description && (
+                        <p className={cn("mt-1 text-sm leading-relaxed text-text-muted", expanded ? "" : "line-clamp-2")}>
+                            {task.description}
+                        </p>
+                    )}
+                </div>
+
+                {/* always visible on touch screens; on desktop they appear on hover or keyboard focus */}
+                <div className="flex items-center -mr-1.5 -mt-1 flex-shrink-0 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100 transition-opacity">
+                    {dragHandleProps && (
+                        <span
+                            {...dragHandleProps}
+                            aria-label="Drag to reorder"
+                            title="Drag to reorder"
+                            className="p-2 rounded-full cursor-grab active:cursor-grabbing text-slate-400 hover:text-text-main hover:bg-slate-100 dark:hover:bg-white/[0.06] transition-colors"
+                        >
+                            <GripVertical className="w-4 h-4" />
+                        </span>
+                    )}
+                    <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); onEdit(); }}
+                        aria-label="Edit task"
+                        title="Edit task"
+                        className="p-2 rounded-full text-slate-400 hover:text-primary hover:bg-primary/10 transition-colors"
+                    >
+                        <Pencil className="w-4 h-4" />
+                    </button>
+                    <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); onDelete(); }}
+                        aria-label="Delete task"
+                        title="Delete task"
+                        className="p-2 rounded-full text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                    >
+                        <Trash2 className="w-4 h-4" />
+                    </button>
+                </div>
+            </div>
+
+            {/* Meta chips: due, priority, client, assignee */}
+            {(dueInfo || task.priority || task.client || assignee) && (
+                <div className="mt-3 pl-10 flex flex-wrap items-center gap-1.5">
+                    {dueInfo && (
+                        <span className={cn(chipClass, dueInfo.tone)}>
+                            <CalendarDays className="w-3.5 h-3.5" />
+                            {dueInfo.label}
+                        </span>
+                    )}
+                    {task.priority && (
+                        <span className={cn(chipClass, 'text-text-muted dark:text-slate-300')}>
+                            <span className={cn('w-2 h-2 rounded-full', PRIORITY_DOT[task.priority])} />
+                            {task.priority.charAt(0).toUpperCase() + task.priority.slice(1)}
+                        </span>
+                    )}
+                    {task.client && (
+                        <span className={cn(chipClass, 'text-teal-700 dark:text-teal-300')}>
+                            <ContactRound className="w-3.5 h-3.5" />
+                            <span className="truncate max-w-[160px]">{task.client.name}</span>
+                        </span>
+                    )}
+                    {assignee && (
+                        <span className={cn(chipClass, 'text-text-muted dark:text-slate-300')} title={assignee.email}>
+                            <span className="w-4 h-4 rounded-full bg-gradient-to-br from-primary to-accent text-on-primary text-[10px] font-semibold flex items-center justify-center uppercase">
+                                {assignee.email.charAt(0)}
+                            </span>
+                            <span className="truncate max-w-[160px]">
+                                {assignee.email.split('@')[0]}{assignee.member_title ? ` · ${assignee.member_title}` : ''}
+                            </span>
+                        </span>
+                    )}
+                </div>
+            )}
+
+            {/* Checklist progress */}
+            {totalSteps > 0 && (
+                <div className="mt-3 pl-10 flex items-center gap-3">
+                    <div
+                        className="flex-1 h-1.5 rounded-full bg-slate-200 dark:bg-white/10 overflow-hidden"
+                        role="progressbar"
+                        aria-label="Checklist progress"
+                        aria-valuemin={0}
+                        aria-valuemax={totalSteps}
+                        aria-valuenow={doneSteps}
+                    >
+                        <div
+                            className="h-full rounded-full bg-gradient-to-r from-primary to-accent transition-[width] duration-500"
+                            style={{ width: `${(doneSteps / totalSteps) * 100}%` }}
+                        />
+                    </div>
+                    <span className="text-xs font-medium tabular-nums text-text-muted">{doneSteps}/{totalSteps}</span>
+                </div>
+            )}
+
+            {/* Footer: what's inside + details toggle */}
+            <div className="mt-3 pl-10 flex items-center gap-3 text-xs text-text-muted">
+                {(task.assets?.length ?? 0) > 0 && (
+                    <span className="inline-flex items-center gap-1" title="Files"><Paperclip className="w-3.5 h-3.5" />{task.assets!.length}</span>
+                )}
+                {(task.tools?.length ?? 0) > 0 && (
+                    <span className="inline-flex items-center gap-1" title="Resources"><Library className="w-3.5 h-3.5" />{task.tools!.length}</span>
+                )}
+                {(task.links?.length ?? 0) > 0 && (
+                    <span className="inline-flex items-center gap-1" title="Links"><LinkIcon className="w-3.5 h-3.5" />{task.links!.length}</span>
+                )}
                 <button
                     type="button"
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        onDelete();
-                    }}
-                    className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
-                    title="Delete task"
+                    onClick={() => setExpanded(e => !e)}
+                    aria-expanded={expanded}
+                    className="ml-auto inline-flex items-center gap-1 px-3 py-1.5 -my-1 -mr-1.5 rounded-full font-medium hover:text-text-main hover:bg-slate-100 dark:hover:text-slate-100 dark:hover:bg-white/[0.06] transition-colors"
                 >
-                    <Trash2 className="w-4 h-4" />
+                    {expanded ? 'Hide details' : 'Details'}
+                    <ChevronDown className={cn('w-3.5 h-3.5 transition-transform duration-200', expanded ? 'rotate-180' : '')} />
                 </button>
             </div>
-            <div className="flex items-start justify-between gap-4">
-                <div className="flex-1 space-y-2">
-                    <div className="flex items-center gap-3 flex-wrap">
-                        {dragHandleProps && (
-                            <div
-                                {...dragHandleProps}
-                                className="cursor-grab active:cursor-grabbing text-slate-300 dark:text-slate-600 hover:text-slate-400 transition-colors"
-                            >
-                                <GripVertical className="w-5 h-5" />
-                            </div>
-                        )}
-                        <button
-                            type="button"
-                            onClick={() => onStatusChange(task)}
-                            className={cn(
-                                "w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all duration-200",
-                                isDone
-                                    ? "bg-green-500 border-green-500 text-white"
-                                    : "border-slate-300 dark:border-slate-600 hover:border-primary text-transparent"
-                            )}
-                        >
-                            <Check className="w-3.5 h-3.5" strokeWidth={3} />
-                        </button>
-                        <h3 className={cn(
-                            "text-lg font-medium transition-all duration-200 min-w-0 break-words",
-                            isDone ? "text-text-muted line-through" : "text-text-main dark:text-slate-200"
-                        )}>
-                            {task.name}
-                        </h3>
-                        {assignee && (
-                            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-xs font-medium text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
-                                <UserIcon className="w-3 h-3" />
-                                {assignee.member_title ? `${assignee.email.split('@')[0]} (${assignee.member_title})` : assignee.email.split('@')[0]}
-                            </span>
-                        )}
-                        {task.due_date && (() => {
-                            const todayStr = new Date().toLocaleDateString('en-CA');
-                            const dueDateObj = new Date(task.due_date + 'T00:00:00');
-                            const formatted = dueDateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-                            const isOverdue = task.due_date < todayStr;
-                            const isToday = task.due_date === todayStr;
 
-                            let badgeClasses: string;
-                            let label: string;
-                            if (isOverdue) {
-                                badgeClasses = 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 border-red-200 dark:border-red-800';
-                                label = `Overdue · ${formatted}`;
-                            } else if (isToday) {
-                                badgeClasses = 'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-800';
-                                label = 'Due Today';
-                            } else {
-                                badgeClasses = 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700';
-                                label = `Due ${formatted}`;
-                            }
-
-                            return (
-                                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border ${badgeClasses}`}>
-                                    {label}
-                                </span>
-                            );
-                        })()}
-                        {task.priority && (() => {
-                            const priorityStyles = {
-                                high: 'bg-red-100 text-red-600 border-red-200 dark:bg-red-900/30 dark:text-red-400',
-                                medium: 'bg-amber-100 text-amber-600 border-amber-200 dark:bg-amber-900/30 dark:text-amber-400',
-                                low: 'bg-blue-100 text-blue-600 border-blue-200 dark:bg-blue-900/30 dark:text-blue-400',
-                            };
-                            return (
-                                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${priorityStyles[task.priority]}`}>
-                                    {task.priority.charAt(0).toUpperCase() + task.priority.slice(1)}
-                                </span>
-                            );
-                        })()}
-                        {task.client && (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium border bg-teal-50 text-teal-700 border-teal-200 dark:bg-teal-900/30 dark:text-teal-400 dark:border-teal-800/50">
-                                <ContactRound className="w-3 h-3" />
-                                {task.client.name}
-                            </span>
-                        )}
-                    </div>
-
-                    {task.description && (
-                        <p className="text-text-muted text-sm pl-9">{task.description}</p>
-                    )}
-
+            {expanded && (
+                <div className="mt-4 pt-4 pl-10 space-y-5 border-t border-slate-200/70 dark:border-white/10 animate-fade-in">
                     {/* Checklist Section */}
-                    <div className="pt-2 pl-9 space-y-3">
+                    <div className="space-y-3">
                         <div className="flex items-center justify-between">
                             <h4 className="text-sm font-semibold text-text-main dark:text-slate-200">Checklist</h4>
                             <div className="flex items-center gap-2">
@@ -479,7 +529,7 @@ Strictly return a JSON array of sub-task objects formatted exactly like this: [{
                     </div>
 
                     {/* File Attachments Section */}
-                    <div className="pt-2 pl-9 space-y-2">
+                    <div className="space-y-2">
                         <div className="flex items-center gap-2">
                             <input
                                 type="file"
@@ -543,7 +593,7 @@ Strictly return a JSON array of sub-task objects formatted exactly like this: [{
                     </div>
 
                     {task.links && task.links.length > 0 && (
-                        <div className="flex flex-wrap gap-2 pl-9 pt-2">
+                        <div className="flex flex-wrap gap-2">
                             {task.links.map((link, idx) => (
                                 <a
                                     key={idx}
@@ -561,7 +611,7 @@ Strictly return a JSON array of sub-task objects formatted exactly like this: [{
                     )}
 
                     {task.tools && task.tools.length > 0 && (
-                        <div className="flex flex-wrap gap-2 pl-9 pt-1">
+                        <div className="flex flex-wrap gap-2">
                             {task.tools.map(tool => (
                                 <a
                                     key={tool.id}
@@ -579,11 +629,12 @@ Strictly return a JSON array of sub-task objects formatted exactly like this: [{
                     )}
 
                     {/* Comments Toggle */}
-                    <div className="pl-9">
+                    <div>
                         <button
                             type="button"
                             onClick={() => setShowComments(!showComments)}
-                            className="inline-flex items-center gap-1.5 text-xs text-text-muted dark:text-slate-500 hover:text-primary dark:hover:text-primary transition-colors mt-3"
+                            aria-expanded={showComments}
+                            className="inline-flex items-center gap-1.5 text-xs text-text-muted dark:text-slate-400 hover:text-primary dark:hover:text-primary transition-colors"
                         >
                             <MessageSquare className="w-3.5 h-3.5" />
                             {`Comments${comments.length > 0 ? ` (${comments.length})` : ''}`}
@@ -670,7 +721,7 @@ Strictly return a JSON array of sub-task objects formatted exactly like this: [{
                         )}
                     </div>
                 </div>
-            </div>
+            )}
 
             <ConfirmModal
                 isOpen={assetToDelete !== null}
@@ -686,6 +737,6 @@ Strictly return a JSON array of sub-task objects formatted exactly like this: [{
             <Modal isOpen={isPickingFile} onClose={() => setIsPickingFile(false)} title="Attach from Files">
                 <FileBrowser key={activeWorkspace?.id} onPick={attachExisting} />
             </Modal>
-        </div>
+        </article>
     );
 }

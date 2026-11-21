@@ -26,26 +26,14 @@ function LinkedInIcon({ className }: { className?: string }) {
     );
 }
 
-const STATUS_CONFIG: Record<Client['status'], { label: string; color: string; bg: string; border: string }> = {
-    active: {
-        label: 'Active',
-        color: 'text-emerald-400',
-        bg: 'bg-emerald-500/10',
-        border: 'border-emerald-500/30',
-    },
-    potential: {
-        label: 'Potential',
-        color: 'text-slate-400',
-        bg: 'bg-slate-500/10',
-        border: 'border-slate-500/30',
-    },
-    negotiating: {
-        label: 'Negotiating',
-        color: 'text-amber-400',
-        bg: 'bg-amber-500/10',
-        border: 'border-amber-500/30',
-    },
+const STATUS_CONFIG: Record<Client['status'], { label: string; dot: string; text: string }> = {
+    active: { label: 'Active', dot: 'bg-emerald-500', text: 'text-emerald-700 dark:text-emerald-300' },
+    potential: { label: 'Potential', dot: 'bg-slate-400', text: 'text-text-muted dark:text-slate-300' },
+    negotiating: { label: 'Negotiating', dot: 'bg-amber-400', text: 'text-amber-700 dark:text-amber-300' },
 };
+
+const initials = (name: string) =>
+    name.trim().split(/\s+/).slice(0, 2).map(w => w.charAt(0)).join('').toUpperCase() || '?';
 
 interface ClientCardProps {
     client: Client;
@@ -95,100 +83,94 @@ export function ClientCard({ client, onEdit, onDelete }: ClientCardProps) {
         },
     ];
 
-    return (
-        <div className="card-base group relative p-5 animate-fade-in">
-            {/* Action buttons — revealed on hover */}
-            <div className="absolute top-4 right-4 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all duration-200">
-                <button
-                    onClick={onEdit}
-                    className="p-2 rounded-lg text-slate-400 hover:text-primary hover:bg-primary/10 dark:hover:bg-primary/20 transition-colors"
-                    title="Edit client"
-                >
-                    <Pencil className="w-4 h-4" />
-                </button>
-                <button
-                    onClick={onDelete}
-                    className="p-2 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
-                    title="Delete client"
-                >
-                    <Trash2 className="w-4 h-4" />
-                </button>
-            </div>
+    const linked = socialLinks.filter(s => s.url);
+    const hasContact = !!(client.email || client.phone);
 
-            {/* Name + Status */}
-            <div className="flex items-start gap-3 mb-4">
+    return (
+        <article className="card-base group relative flex flex-col p-5 animate-fade-in">
+            {/* Identity: initials, name, status, actions */}
+            <div className="flex items-start gap-3">
+                <div className="w-11 h-11 rounded-full bg-gradient-to-br from-primary to-accent text-on-primary flex items-center justify-center flex-shrink-0 text-sm font-semibold">
+                    {initials(client.name)}
+                </div>
                 <div className="flex-1 min-w-0">
-                    <h3 className="text-lg font-semibold text-text-main dark:text-slate-100 truncate pr-8">
+                    <h3 className="text-base font-semibold leading-snug tracking-[-0.01em] text-text-main dark:text-slate-100 line-clamp-2 break-words" title={client.name}>
                         {client.name}
                     </h3>
-                    <span className={`inline-flex items-center mt-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium border ${status.bg} ${status.color} ${status.border}`}>
+                    <span className={`mt-1 inline-flex items-center gap-1.5 text-xs font-medium ${status.text}`}>
+                        <span className={`w-2 h-2 rounded-full ${status.dot}`} />
                         {status.label}
                     </span>
                 </div>
+                {/* always visible on touch, on hover/focus on desktop */}
+                <div className="flex items-center -mr-1.5 -mt-1 md:absolute md:top-3 md:right-3 md:m-0 md:p-0.5 md:rounded-full md:bg-white/90 md:dark:bg-dark-surface/95 md:backdrop-blur md:shadow-soft md:z-10 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100 transition-opacity">
+                    <button
+                        type="button"
+                        onClick={onEdit}
+                        aria-label={`Edit ${client.name}`}
+                        title="Edit"
+                        className="p-2 rounded-full text-slate-400 hover:text-primary hover:bg-primary/10 transition-colors"
+                    >
+                        <Pencil className="w-4 h-4" />
+                    </button>
+                    <button
+                        type="button"
+                        onClick={onDelete}
+                        aria-label={`Delete ${client.name}`}
+                        title="Delete"
+                        className="p-2 rounded-full text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                    >
+                        <Trash2 className="w-4 h-4" />
+                    </button>
+                </div>
             </div>
 
-            {/* Contact Details */}
-            <div className="space-y-2 mb-4">
-                {client.email ? (
-                    <a href={`mailto:${client.email}`} className="flex items-center gap-2 text-sm text-text-muted dark:text-slate-400 hover:text-primary dark:hover:text-primary transition-colors truncate">
-                        <Mail className="w-3.5 h-3.5 flex-shrink-0" />
+            {/* Contact: only what exists */}
+            <div className="mt-4 space-y-1.5">
+                {client.email && (
+                    <a href={`mailto:${client.email}`} className="flex items-center gap-2.5 text-sm text-text-muted dark:text-slate-300 hover:text-primary dark:hover:text-primary transition-colors min-w-0">
+                        <Mail className="w-4 h-4 flex-shrink-0 opacity-70" />
                         <span className="truncate">{client.email}</span>
                     </a>
-                ) : (
-                    <div className="flex items-center gap-2 text-sm text-slate-300 dark:text-slate-600">
-                        <Mail className="w-3.5 h-3.5 flex-shrink-0" />
-                        <span>No email</span>
-                    </div>
                 )}
-
-                {client.phone ? (
-                    <a href={`tel:${client.phone}`} className="flex items-center gap-2 text-sm text-text-muted dark:text-slate-400 hover:text-primary dark:hover:text-primary transition-colors">
-                        <Phone className="w-3.5 h-3.5 flex-shrink-0" />
-                        <span>{client.phone}</span>
+                {client.phone && (
+                    <a href={`tel:${client.phone}`} className="flex items-center gap-2.5 text-sm text-text-muted dark:text-slate-300 hover:text-primary dark:hover:text-primary transition-colors">
+                        <Phone className="w-4 h-4 flex-shrink-0 opacity-70" />
+                        <span className="tabular-nums">{client.phone}</span>
                     </a>
-                ) : (
-                    <div className="flex items-center gap-2 text-sm text-slate-300 dark:text-slate-600">
-                        <Phone className="w-3.5 h-3.5 flex-shrink-0" />
-                        <span>No phone</span>
-                    </div>
                 )}
+                {!hasContact && <p className="text-sm text-text-muted/70">No contact details yet</p>}
             </div>
 
-            {/* Notes Section */}
             {client.notes && (
-                <div className="mb-4 pt-4 border-t border-slate-100 dark:border-dark-border/50">
-                    <p className="text-sm text-text-muted dark:text-slate-400 whitespace-pre-wrap leading-relaxed line-clamp-4 hover:line-clamp-none transition-all">
-                        {client.notes}
-                    </p>
-                </div>
+                <p className="mt-3 text-sm leading-relaxed text-text-muted dark:text-slate-400 whitespace-pre-wrap line-clamp-3" title={client.notes}>
+                    {client.notes}
+                </p>
             )}
 
-            {/* Social Links Row */}
-            <div className={`flex flex-wrap items-center gap-1 pt-3 ${!client.notes ? 'border-t border-slate-100 dark:border-dark-border/50' : ''}`}>
-                {socialLinks.map(({ key, icon, url }) =>
-                    url ? (
-                        <a
-                            key={key}
-                            href={url.startsWith('http') ? url : `https://${url}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="p-2 rounded-lg text-text-muted dark:text-slate-400 hover:text-primary hover:bg-primary/10 dark:hover:bg-primary/20 transition-all duration-200"
-                            title={key.charAt(0).toUpperCase() + key.slice(1)}
-                            aria-label={key.charAt(0).toUpperCase() + key.slice(1)}
-                        >
-                            {icon}
-                        </a>
-                    ) : (
-                        <span
-                            key={key}
-                            className="p-2 rounded-lg text-slate-300 dark:text-slate-700 cursor-default"
-                            title={`No ${key}`}
-                        >
-                            {icon}
-                        </span>
-                    )
-                )}
-            </div>
-        </div>
+            {/* Links: only the ones that are set */}
+            {linked.length > 0 && (
+                <div className="mt-auto pt-4">
+                    <div className="flex flex-wrap items-center gap-1 pt-3 border-t border-slate-200/70 dark:border-white/10">
+                        {linked.map(({ key, icon, url }) => {
+                            const label = key.charAt(0).toUpperCase() + key.slice(1);
+                            return (
+                                <a
+                                    key={key}
+                                    href={url!.startsWith('http') ? url : `https://${url}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    title={label}
+                                    aria-label={`${client.name} on ${label}`}
+                                    className="w-9 h-9 rounded-full flex items-center justify-center text-text-muted dark:text-slate-300 bg-slate-100 dark:bg-white/[0.05] hover:text-on-primary hover:bg-primary transition-colors duration-200"
+                                >
+                                    {icon}
+                                </a>
+                            );
+                        })}
+                    </div>
+                </div>
+            )}
+        </article>
     );
 }
