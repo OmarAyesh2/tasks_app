@@ -13,6 +13,8 @@ const corsHeaders = {
   'Access-Control-Expose-Headers': 'content-disposition, content-type',
 };
 const FOLDER = 'application/vnd.google-apps.folder';
+// keep in sync with FOLDER_COLORS in src/components/FileBrowser.tsx
+const FOLDER_COLORS = ['sky', 'blue', 'lavender', 'violet', 'green', 'yellow', 'orange', 'red', 'pink', 'gray'];
 
 class HttpError extends Error {
   status: number;
@@ -182,6 +184,20 @@ serve(async (req: Request) => {
     if (protectedIds.has(item.id)) throw new HttpError(403, 'Workspace and project folders are managed from the app');
     if (!canModify(role, item)) throw new HttpError(403, 'You can only change files and folders you added');
   };
+  // project folders are recolored by owners/admins; other folders follow the normal edit rule
+  const canColor = (role: string, item: any, protectedIds: Set<string | null>) =>
+    protectedIds.has(item.id) ? role === 'owner' || role === 'admin' : canModify(role, item);
+  const toItem = (f: any, role: string, protectedIds: Set<string | null>) => {
+    const isFolder = f.mimeType === FOLDER;
+    return {
+      id: f.id, name: f.name, mimeType: f.mimeType, isFolder,
+      size: f.size ? Number(f.size) : null, modifiedTime: f.modifiedTime, webViewLink: f.webViewLink,
+      color: isFolder ? (f.appProperties?.color ?? null) : null,
+      isProtected: protectedIds.has(f.id),
+      canModify: !protectedIds.has(f.id) && canModify(role, f),
+      canColor: isFolder && canColor(role, f, protectedIds),
+    };
+  };
   const forgetAttachments = (ws: string, fileId: string) =>
     admin.from('task_assets').delete().eq('workspace_id', ws).like('public_url', `%/d/${fileId}/%`);
 
@@ -248,13 +264,43 @@ serve(async (req: Request) => {
       const folder = path[path.length - 1];
       if (folder.mimeType !== FOLDER) throw new HttpError(400, 'Not a folder');
       const protectedIds = new Set([root, ...projectFolders]);
-      const items = children.map(f => ({
-        id: f.id, name: f.name, mimeType: f.mimeType, isFolder: f.mimeType === FOLDER,
-        size: f.size ? Number(f.size) : null, modifiedTime: f.modifiedTime, webViewLink: f.webViewLink,
-        isProtected: protectedIds.has(f.id!),
-        canModify: !protectedIds.has(f.id!) && canModify(role, f),
-      }));
+      const items = children.map(f => toItem(f, role, protectedIds));
       return json({ canEdit: canEdit(role), path: path.map(p => ({ id: p.id, name: p.name })), items });
+    },
+
+    // workspace-wide name search; results outside this workspace's folder are dropped by the ancestry walk
+    search: async ({ workspaceId, query }) => {
+      const ws = checkId(workspaceId);
+      const role = await roleIn(ws);
+      const text = typeof query === 'string' ? query.trim() : '';
+      if (text.length < 2) return json({ items: [] });
+      const [root, projects] = await Promise.all([ensureRoot(ws), projectsOf(ws)]);
+      const res = await drive.files.list({
+        q: `name contains '${q(text)}' and trashed = false`,
+        fields: 'files(id,name,mimeType,size,modifiedTime,appProperties,webViewLink,parents)',
+        orderBy: 'modifiedTime desc', pageSize: 40, // shortcut: first 40 matches across the Drive
+      });
+      const protectedIds = new Set([root, ...projects.map(p => p.drive_folder_id)]);
+      const found = await Promise.all((res.data.files ?? []).filter(f => f.id !== root).map(async f => {
+        try {
+          const path = await pathTo(f.id!, root);
+          const parent = path[path.length - 2];
+          return { ...toItem(f, role, protectedIds), location: parent?.name ?? null, parentId: parent?.id ?? null };
+        } catch { return null; }
+      }));
+      return json({ items: found.filter(Boolean) });
+    },
+
+    setColor: async ({ workspaceId, fileId, color }) => {
+      const ws = checkId(workspaceId);
+      const role = await roleIn(ws);
+      if (!FOLDER_COLORS.includes(color)) throw new HttpError(400, 'Unknown color');
+      const { root, item } = await locate(ws, fileId);
+      if (item.mimeType !== FOLDER) throw new HttpError(400, 'Only folders have a color');
+      const protectedIds = new Set([root, ...(await projectsOf(ws)).map(p => p.drive_folder_id)]);
+      if (!canColor(role, item, protectedIds)) throw new HttpError(403, 'You can only recolor folders you created');
+      await drive.files.update({ fileId: item.id, requestBody: { appProperties: { color } } });
+      return json({ ok: true });
     },
 
     mkdir: async ({ workspaceId, parentId, name }) => {
