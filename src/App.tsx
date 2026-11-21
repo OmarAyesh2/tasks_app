@@ -14,12 +14,16 @@ import { ClientModal } from './components/ClientModal';
 import { ConfirmModal } from './components/ConfirmModal';
 import { MemberManagement } from './components/MemberManagement';
 import { WorkTime } from './components/WorkTime';
-import { Plus, Loader2, Menu, List, Columns3 } from 'lucide-react';
+import { Plus, Loader2, Menu, List, Columns3, Search, LayoutList, CheckSquare, CalendarDays, Library, FolderOpen, Users, Clock, ContactRound, Keyboard } from 'lucide-react';
 import { supabase, deleteDriveAttachments, canDeleteFile, taskAccess } from './lib/supabase';
 import { FileBrowser } from './components/FileBrowser';
 import { NotificationBell } from './components/NotificationBell';
 import { CalendarView } from './components/CalendarView';
 import { KanbanBoard } from './components/KanbanBoard';
+import { CommandPalette, Kbd, type PaletteCommand } from './components/CommandPalette';
+import { FileViewer } from './components/FileViewer';
+import { Modal } from './components/Modal';
+import type { DriveItem } from './components/FileBrowser';
 import type { Task, Tool, Project, Client } from './types';
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy, arrayMove, useSortable } from '@dnd-kit/sortable';
@@ -81,6 +85,9 @@ function Dashboard() {
 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [focusTaskId, setFocusTaskId] = useState<string | null>(null); // opened from a notification
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [viewingFile, setViewingFile] = useState<DriveItem | null>(null); // opened from search
   const [taskLayout, setTaskLayout] = useState<'list' | 'board'>(() => {
     try { return localStorage.getItem('task_layout') === 'board' ? 'board' : 'list'; } catch { return 'list'; }
   });
@@ -262,6 +269,42 @@ function Dashboard() {
     setTimeout(() => setFocusTaskId(id => (id === taskId ? null : id)), 6000);
   };
 
+  // keyboard shortcuts: Ctrl/⌘+K or / search, N new task, ? list, G then a letter to switch page
+  useEffect(() => {
+    let gPressedAt = 0;
+    const pages: Record<string, typeof currentView> = { t: 'tasks', d: 'completed', c: 'calendar', r: 'tools', f: 'files', m: 'members' };
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setPaletteOpen(open => !open);
+        return;
+      }
+      // never while typing or while a dialog is open
+      const target = e.target as HTMLElement;
+      if (e.ctrlKey || e.metaKey || e.altKey || target.closest('input, textarea, select, [contenteditable="true"]') || document.querySelector('[role="dialog"]')) return;
+      const key = e.key.toLowerCase();
+      if (pages[key] && Date.now() - gPressedAt < 1000) {
+        e.preventDefault();
+        gPressedAt = 0;
+        setCurrentView(pages[key]);
+      } else if (key === 'g') {
+        gPressedAt = Date.now();
+      } else if (e.key === '/') {
+        e.preventDefault();
+        setPaletteOpen(true);
+      } else if (e.key === '?') {
+        e.preventDefault();
+        setShortcutsOpen(true);
+      } else if (key === 'n' && currentMemberProfile && currentMemberProfile.permission_role !== 'viewer') {
+        e.preventDefault();
+        setTaskToEdit(null);
+        setIsTaskModalOpen(true);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [currentMemberProfile]);
+
   const handleTaskStatusChange = async (task: Task) => {
     handleTaskUpdate(task.id, { status: task.status === 'done' ? 'to_do' : 'done' });
   };
@@ -411,6 +454,24 @@ function Dashboard() {
   };
   const filteredTasks = tasks.filter(t => matchesFilters(t) && (currentView === 'tasks' ? t.status !== 'done' : t.status === 'done'));
 
+  const role = currentMemberProfile?.permission_role;
+  const modKey = /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl';
+  const paletteCommands: PaletteCommand[] = [
+    { id: 'tasks', label: 'Tasks', hint: 'G T', icon: LayoutList, run: () => setCurrentView('tasks') },
+    { id: 'completed', label: 'Completed', hint: 'G D', icon: CheckSquare, run: () => setCurrentView('completed') },
+    { id: 'calendar', label: 'Calendar', hint: 'G C', icon: CalendarDays, run: () => setCurrentView('calendar') },
+    { id: 'tools', label: 'Resources', hint: 'G R', icon: Library, run: () => setCurrentView('tools') },
+    { id: 'files', label: 'Files', hint: 'G F', icon: FolderOpen, run: () => setCurrentView('files') },
+    { id: 'members', label: 'Members', hint: 'G M', icon: Users, run: () => setCurrentView('members') },
+    ...(activeWorkspace?.time_tracking_enabled && role !== 'viewer'
+      ? [{ id: 'work_time', label: 'Work Time', icon: Clock, run: () => setCurrentView('work_time') }] : []),
+    ...(activeWorkspace?.enable_client_tracker
+      ? [{ id: 'clients', label: 'Clients', icon: ContactRound, run: () => setCurrentView('clients') }] : []),
+    ...(role && role !== 'viewer'
+      ? [{ id: 'new-task', label: 'New task', hint: 'N', icon: Plus, run: () => { setTaskToEdit(null); setIsTaskModalOpen(true); } }] : []),
+    { id: 'shortcuts', label: 'Keyboard shortcuts', hint: '?', icon: Keyboard, run: () => setShortcutsOpen(true) },
+  ];
+
   const memberFilter = (currentMemberProfile?.permission_role === 'owner' || currentMemberProfile?.permission_role === 'admin') && (
     <div className="flex justify-end mb-4">
       <select
@@ -538,6 +599,17 @@ function Dashboard() {
           </div>
 
           <div className="flex items-center gap-2 w-full fold:w-auto md:w-auto">
+          <button
+            type="button"
+            onClick={() => setPaletteOpen(true)}
+            aria-label="Search"
+            title={`Search (${modKey}+K)`}
+            className="h-11 min-w-11 inline-flex items-center justify-center gap-2 px-3 rounded-full text-text-muted hover:text-text-main hover:bg-slate-900/[0.05] dark:hover:text-slate-100 dark:hover:bg-white/[0.06] transition-colors"
+          >
+            <Search className="w-5 h-5" />
+            <span className="hidden lg:inline text-sm">Search</span>
+            <span className="hidden lg:inline"><Kbd>{modKey} K</Kbd></span>
+          </button>
           <NotificationBell onOpenTask={handleOpenTask} />
           {currentView !== 'members' && currentView !== 'work_time' && currentView !== 'files' && currentMemberProfile?.permission_role !== 'viewer' && (
             <button
@@ -736,6 +808,52 @@ function Dashboard() {
             )}
           </>
         )}
+
+        {paletteOpen && (
+          <CommandPalette
+            workspaceId={activeWorkspace?.id}
+            tasks={tasks}
+            clients={activeWorkspace?.enable_client_tracker ? clients : []}
+            tools={tools}
+            commands={paletteCommands}
+            onOpenTask={(task) => activeWorkspace && handleOpenTask(activeWorkspace.id, task.id)}
+            onOpenClient={(client) => {
+              setCurrentView('clients');
+              if (role !== 'viewer') { setClientToEdit(client); setIsClientModalOpen(true); }
+            }}
+            onOpenFile={setViewingFile}
+            onClose={() => setPaletteOpen(false)}
+          />
+        )}
+
+        {viewingFile && activeWorkspace && (
+          <FileViewer workspaceId={activeWorkspace.id} files={[{ id: viewingFile.id, name: viewingFile.name }]} startIndex={0} onClose={() => setViewingFile(null)} />
+        )}
+
+        <Modal isOpen={shortcutsOpen} onClose={() => setShortcutsOpen(false)} title="Keyboard shortcuts">
+          <dl className="grid grid-cols-[1fr_auto] gap-x-6 gap-y-3 text-sm">
+            {([
+              [[`${modKey} K`], 'Search everything (/ works too)'],
+              [['N'], 'New task'],
+              [['G', 'T'], 'Go to Tasks'],
+              [['G', 'D'], 'Go to Completed'],
+              [['G', 'C'], 'Go to Calendar'],
+              [['G', 'R'], 'Go to Resources'],
+              [['G', 'F'], 'Go to Files'],
+              [['G', 'M'], 'Go to Members'],
+              [['?'], 'Show this list'],
+              [['Esc'], 'Close a dialog or preview'],
+              [[`${modKey} Enter`], 'Save the open form'],
+            ] as const).map(([keys, label]) => (
+              <div key={label + keys.join()} className="contents">
+                <dt className="text-text-main dark:text-slate-200">{label}</dt>
+                <dd className="flex items-center gap-1 text-text-muted">
+                  {keys.map((k, i) => <span key={k} className="flex items-center gap-1">{i > 0 && <span className="text-xs">then</span>}<Kbd>{k}</Kbd></span>)}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </Modal>
 
         <AddTaskModal
           isOpen={isTaskModalOpen}
