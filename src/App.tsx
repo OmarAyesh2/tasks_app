@@ -327,6 +327,9 @@ function Dashboard() {
       .update(dbUpdates)
       .eq('id', taskId);
 
+    // finishing a repeating task makes the database create the next one; load it
+    if (!error && updates.status === 'done' && tasks.find(t => t.id === taskId)?.recurrence) fetchData();
+
     if (error) {
       console.error('Error updating task:', error);
       fetchData(); // Revert

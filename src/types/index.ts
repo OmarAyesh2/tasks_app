@@ -49,6 +49,8 @@ export type Task = {
     sub_tasks?: SubTask[] | null;
     due_date?: string | null;
     priority?: 'high' | 'medium' | 'low' | null;
+    recurrence?: 'daily' | 'weekly' | 'monthly' | null;
+    next_task_id?: string | null; // the occurrence created when this one was finished
     sort_order?: number;
     tools?: Tool[];
     assets?: TaskAsset[];

@@ -47,6 +47,7 @@ export function AddTaskModal({ isOpen, onClose, onSuccess, tools, members, taskT
     const [assignedToMember, setAssignedToMember] = useState<string | null>(null);
     const [dueDate, setDueDate] = useState('');
     const [priority, setPriority] = useState<'high' | 'medium' | 'low' | null>(null);
+    const [recurrence, setRecurrence] = useState<'daily' | 'weekly' | 'monthly' | null>(null);
     const [clientId, setClientId] = useState<string | null>(null);
 
     // Tool selection state
@@ -75,6 +76,7 @@ export function AddTaskModal({ isOpen, onClose, onSuccess, tools, members, taskT
                 setAssignedToMember(taskToEdit.assigned_to_member || null);
                 setDueDate(taskToEdit.due_date ?? '');
                 setPriority(taskToEdit.priority ?? null);
+                setRecurrence(taskToEdit.recurrence ?? null);
                 setClientId(taskToEdit.client_id ?? null);
                 setSelectedToolIds(taskToEdit.tools?.map(t => t.id) || []);
                 setInlineTools([]);
@@ -105,6 +107,7 @@ export function AddTaskModal({ isOpen, onClose, onSuccess, tools, members, taskT
         setAssignedToMember(null);
         setDueDate('');
         setPriority(null);
+        setRecurrence(null);
         setClientId(null);
         setSelectedToolIds([]);
         setInlineTools([]);
@@ -193,6 +196,7 @@ export function AddTaskModal({ isOpen, onClose, onSuccess, tools, members, taskT
                         assigned_to_member: assignedToMember,
                         due_date: dueDate || null,
                         priority,
+                        recurrence,
                         client_id: clientId || null
                     })
                     .eq('id', taskToEdit!.id);
@@ -222,6 +226,7 @@ export function AddTaskModal({ isOpen, onClose, onSuccess, tools, members, taskT
                         assigned_to_member: assignedToMember,
                         due_date: dueDate || null,
                         priority,
+                        recurrence,
                         client_id: clientId || null
                     })
                     .select('id')
@@ -373,6 +378,27 @@ export function AddTaskModal({ isOpen, onClose, onSuccess, tools, members, taskT
                             onChange={(e) => setDueDate(e.target.value)}
                             className="input-field"
                         />
+                    </div>
+
+                    <div>
+                        <label htmlFor="task-repeat" className={labelClass}>Repeat</label>
+                        <select
+                            id="task-repeat"
+                            value={recurrence ?? ''}
+                            onChange={(e) => { setRecurrence((e.target.value || null) as typeof recurrence); setDirty(true); }}
+                            aria-describedby="task-repeat-hint"
+                            className="input-field"
+                        >
+                            <option value="">Doesn't repeat</option>
+                            <option value="daily">Every day</option>
+                            <option value="weekly">Every week</option>
+                            <option value="monthly">Every month</option>
+                        </select>
+                        {recurrence && (
+                            <p id="task-repeat-hint" className="mt-1 text-xs text-text-muted">
+                                When it's done, the next one is created{dueDate ? '' : ', counting from the day you finish it'}.
+                            </p>
+                        )}
                     </div>
 
                     <div>

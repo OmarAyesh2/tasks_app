@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import type { Task, TaskComment, TaskAsset } from '../types';
 import { ConfirmModal } from './ConfirmModal';
-import { Check, Link as LinkIcon, ExternalLink, Trash2, Library, Pencil, Loader2, Sparkles, Plus, X, Paperclip, File as FileIcon, FolderOpen, GripVertical, MessageSquare, Send, ContactRound, ChevronDown, CalendarDays } from 'lucide-react';
+import { Check, Link as LinkIcon, ExternalLink, Trash2, Library, Pencil, Loader2, Sparkles, Plus, X, Paperclip, File as FileIcon, FolderOpen, GripVertical, MessageSquare, Send, ContactRound, ChevronDown, CalendarDays, Repeat } from 'lucide-react';
 import { supabase, canDeleteFile, driveFileId, taskAccess } from '../lib/supabase';
 import { FileViewer, type ViewerFile } from './FileViewer';
 import { FileBrowser, type DriveItem } from './FileBrowser';
@@ -390,7 +390,7 @@ Strictly return a JSON array of sub-task objects formatted exactly like this: [{
             </div>
 
             {/* Meta chips: due, priority, client, assignee */}
-            {(dueInfo || task.priority || task.client || assignee || task.status === 'in_progress') && (
+            {(dueInfo || task.priority || task.client || assignee || task.status === 'in_progress' || (task.recurrence && !task.next_task_id)) && (
                 <div className="mt-3 pl-10 flex flex-wrap items-center gap-1.5">
                     {task.status === 'in_progress' && (
                         <span className={cn(chipClass, 'text-accent border-accent/30 bg-accent/10')}>
@@ -402,6 +402,12 @@ Strictly return a JSON array of sub-task objects formatted exactly like this: [{
                         <span className={cn(chipClass, dueInfo.tone)}>
                             <CalendarDays className="w-3.5 h-3.5" />
                             {dueInfo.label}
+                        </span>
+                    )}
+                    {task.recurrence && !task.next_task_id && (
+                        <span className={cn(chipClass, 'text-text-muted dark:text-slate-300')} title="A new copy is created when this one is done">
+                            <Repeat className="w-3.5 h-3.5" />
+                            {{ daily: 'Daily', weekly: 'Weekly', monthly: 'Monthly' }[task.recurrence]}
                         </span>
                     )}
                     {task.priority && (
