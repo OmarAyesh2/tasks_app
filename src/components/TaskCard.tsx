@@ -6,6 +6,7 @@ import { supabase, canDeleteFile, driveFileId, taskAccess } from '../lib/supabas
 import { FileViewer, type ViewerFile } from './FileViewer';
 import { FileBrowser, type DriveItem } from './FileBrowser';
 import { Modal } from './Modal';
+import { TaskActivity } from './TaskActivity';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { useWorkspace, type WorkspaceMember } from '../context/WorkspaceContext';
@@ -755,6 +756,8 @@ Strictly return a JSON array of sub-task objects formatted exactly like this: [{
                             </div>
                         )}
                     </div>
+
+                    <TaskActivity taskId={task.id} />
                 </div>
             )}
 
