@@ -68,7 +68,8 @@ serve(async (req: Request) => {
         return new Response(JSON.stringify({ error: "Not allowed to delete this file" }), { status: 403, headers: corsHeaders });
       }
 
-      await drive.files.delete({ fileId: fileId });
+      // 404: the file lives in the old (pre-switch) Drive account, which this token can't reach
+      await drive.files.delete({ fileId: fileId }).catch((e: any) => { if (e?.code !== 404) throw e; });
 
       return new Response(JSON.stringify({ success: true, message: "File deleted from Google Drive" }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
