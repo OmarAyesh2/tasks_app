@@ -7,7 +7,9 @@ import {
 import type { Task } from '../types';
 import { supabase } from '../lib/supabase';
 
-export type CalendarNote = { id: string; day: string; body: string; created_by: string; author_email: string | null };
+export type CalendarNote = { id: string; day: string; body: string; created_by: string; author_email: string | null; assigned_to: string | null };
+export type NoteAssignee = { userId: string; label: string };
+const NOTE_FIELDS = 'id, day, body, created_by, author_email, assigned_to';
 
 const PRIORITY_DOT = { high: 'bg-red-500', medium: 'bg-amber-400', low: 'bg-primary' } as const;
 const NO_DATE = 'no-date';
@@ -29,18 +31,21 @@ interface CalendarViewProps {
     workspaceId: string;
     tasks: Task[]; // already filtered by project and member
     canEdit: boolean; // move tasks and add notes (everyone but viewers)
-    canRemoveNote: (note: CalendarNote) => boolean; // the author, or an owner/admin (same as the database rule)
+    currentUserId: string;
+    assignees?: NoteAssignee[]; // owners/admins only: members they can leave a note for
     onReschedule: (taskId: string, dueDate: string | null) => void;
     onOpen: (task: Task) => void;
 }
 
-export function CalendarView({ workspaceId, tasks, canEdit, canRemoveNote, onReschedule, onOpen }: CalendarViewProps) {
+// Notes are private: only the writer sees them, unless an owner/admin leaves one for a member (then both do).
+export function CalendarView({ workspaceId, tasks, canEdit, currentUserId, assignees, onReschedule, onOpen }: CalendarViewProps) {
     const [month, setMonth] = useState(() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1); });
     const [selected, setSelected] = useState(todayKey);
     const [dragging, setDragging] = useState<Task | null>(null);
     const [notes, setNotes] = useState<CalendarNote[]>([]);
     const [draft, setDraft] = useState('');
     const [savingNote, setSavingNote] = useState(false);
+    const [noteFor, setNoteFor] = useState(''); // '' = just me
     const sensors = useSensors(
         useSensor(PointerSensor, { activationConstraint: { distance: 6 } }), // a plain click still opens the task
         useSensor(KeyboardSensor),
@@ -68,7 +73,7 @@ export function CalendarView({ workspaceId, tasks, canEdit, canRemoveNote, onRes
     // notes for the six weeks on screen
     useEffect(() => {
         let cancelled = false;
-        supabase!.from('calendar_notes').select('id, day, body, created_by, author_email')
+        supabase!.from('calendar_notes').select(NOTE_FIELDS)
             .eq('workspace_id', workspaceId).gte('day', firstKey).lte('day', lastKey).order('created_at')
             .then(({ data, error }) => {
                 if (error) console.error('Could not load calendar notes:', error);
@@ -85,8 +90,8 @@ export function CalendarView({ workspaceId, tasks, canEdit, canRemoveNote, onRes
         if (!body) return;
         setSavingNote(true);
         const { data, error } = await supabase!.from('calendar_notes')
-            .insert({ workspace_id: workspaceId, day: selected, body })
-            .select('id, day, body, created_by, author_email').single();
+            .insert({ workspace_id: workspaceId, day: selected, body, assigned_to: noteFor || null })
+            .select(NOTE_FIELDS).single();
         setSavingNote(false);
         if (error) { alert('Could not save the note. Please try again.'); return; }
         setNotes(list => [...list, data as CalendarNote]);
@@ -112,6 +117,11 @@ export function CalendarView({ workspaceId, tasks, canEdit, canRemoveNote, onRes
 
     const selectedTasks = byDay.get(selected) ?? [];
     const selectedNotes = notesByDay.get(selected) ?? [];
+    const nameOf = (userId: string | null) => assignees?.find(a => a.userId === userId)?.label ?? 'a member';
+    // who else is involved: "for sara" on notes you left, "from omar" on notes left for you
+    const noteTag = (n: CalendarNote) =>
+        n.created_by !== currentUserId ? `from ${n.author_email?.split('@')[0] ?? 'an admin'}`
+            : n.assigned_to && n.assigned_to !== currentUserId ? `for ${nameOf(n.assigned_to)}` : null;
     const selectedLabel = new Date(selected + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
 
     return (
@@ -170,9 +180,9 @@ export function CalendarView({ workspaceId, tasks, canEdit, canRemoveNote, onRes
                                         <StickyNote className="w-4 h-4 mt-0.5 flex-shrink-0 text-amber-500" />
                                         <span className="flex-1 min-w-0 break-words">
                                             {n.body}
-                                            {n.author_email && <span className="block text-xs text-amber-700/70 dark:text-amber-200/60">{n.author_email.split('@')[0]}</span>}
+                                            {noteTag(n) && <span className="block text-xs text-amber-700/70 dark:text-amber-200/60">{noteTag(n)}</span>}
                                         </span>
-                                        {canRemoveNote(n) && (
+                                        {(n.created_by === currentUserId || n.assigned_to === currentUserId) && (
                                             <button type="button" onClick={() => removeNote(n)} aria-label={`Delete note: ${n.body}`}
                                                 className="p-1 -m-1 rounded-full text-amber-600/70 hover:text-red-500 hover:bg-white/60 dark:hover:bg-white/10 transition-colors">
                                                 <X className="w-4 h-4" />
@@ -184,7 +194,7 @@ export function CalendarView({ workspaceId, tasks, canEdit, canRemoveNote, onRes
                         )}
 
                         {canEdit && (
-                            <form onSubmit={addNote} className="flex items-center gap-2 mb-4">
+                            <form onSubmit={addNote} className="flex flex-wrap sm:flex-nowrap items-center gap-2 mb-1">
                                 <label htmlFor="calendar-note" className="sr-only">Add a note for {selectedLabel}</label>
                                 <input
                                     id="calendar-note"
@@ -192,13 +202,25 @@ export function CalendarView({ workspaceId, tasks, canEdit, canRemoveNote, onRes
                                     onChange={(e) => setDraft(e.target.value)}
                                     maxLength={500}
                                     placeholder="Add a note for this day, e.g. Follow up Abdeen"
-                                    className="input-field flex-1 text-sm py-2"
+                                    className="input-field flex-1 min-w-0 basis-full sm:basis-auto text-sm py-2"
                                 />
+                                {assignees && assignees.length > 0 && (
+                                    <select value={noteFor} onChange={(e) => setNoteFor(e.target.value)} aria-label="Who the note is for"
+                                        className="input-field w-auto flex-1 sm:flex-none text-sm py-2 cursor-pointer">
+                                        <option value="">Just me</option>
+                                        {assignees.map(a => <option key={a.userId} value={a.userId}>For {a.label}</option>)}
+                                    </select>
+                                )}
                                 <button type="submit" disabled={!draft.trim() || savingNote} aria-label="Add note"
                                     className="h-10 w-10 flex-shrink-0 rounded-full bg-primary text-on-primary flex items-center justify-center hover:bg-primary-hover transition-colors disabled:opacity-40">
                                     <Plus className="w-5 h-5" />
                                 </button>
                             </form>
+                        )}
+                        {canEdit && (
+                            <p className="text-xs text-text-muted mb-4">
+                                {noteFor ? `Only you and ${nameOf(noteFor)} will see this note, and they'll be notified.` : 'Only you can see your notes.'}
+                            </p>
                         )}
 
                         {selectedTasks.length === 0 ? (

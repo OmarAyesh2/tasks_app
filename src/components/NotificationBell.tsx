@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { AlarmClock, Bell, CalendarClock, CheckCheck, MessageSquare, UserPlus } from 'lucide-react';
+import { AlarmClock, Bell, CalendarClock, CheckCheck, MessageSquare, StickyNote, UserPlus } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import { useWorkspace } from '../context/WorkspaceContext';
@@ -8,7 +8,7 @@ type Notification = {
     id: string;
     workspace_id: string;
     task_id: string | null;
-    type: 'assigned' | 'comment' | 'due_today' | 'overdue';
+    type: 'assigned' | 'comment' | 'due_today' | 'overdue' | 'note';
     actor_email: string | null;
     title: string;
     body: string | null;
@@ -21,6 +21,7 @@ const LOOK = {
     comment: { Icon: MessageSquare, tone: 'text-accent bg-accent/10' },
     due_today: { Icon: CalendarClock, tone: 'text-amber-500 bg-amber-500/10' },
     overdue: { Icon: AlarmClock, tone: 'text-red-500 bg-red-500/10' },
+    note: { Icon: StickyNote, tone: 'text-amber-500 bg-amber-500/10' },
 };
 
 const who = (email: string | null) => email?.split('@')[0] ?? 'Someone';
@@ -29,6 +30,7 @@ const headline = (n: Notification) => ({
     comment: `${who(n.actor_email)} commented`,
     due_today: 'Due today',
     overdue: 'Overdue',
+    note: `${who(n.actor_email)} left you a note for ${n.body ?? 'a day'}`,
 })[n.type];
 
 const timeAgo = (iso: string) => {
@@ -42,10 +44,11 @@ const timeAgo = (iso: string) => {
 
 interface NotificationBellProps {
     onOpenTask: (workspaceId: string, taskId: string) => void;
+    onOpenCalendar: (workspaceId: string) => void;
 }
 
 // Bell with unread count; new notifications arrive live. Shows all workspaces, newest first.
-export function NotificationBell({ onOpenTask }: NotificationBellProps) {
+export function NotificationBell({ onOpenTask, onOpenCalendar }: NotificationBellProps) {
     const { user } = useAuth();
     const { workspaces } = useWorkspace();
     const [items, setItems] = useState<Notification[]>([]);
@@ -89,6 +92,7 @@ export function NotificationBell({ onOpenTask }: NotificationBellProps) {
         markRead(n.read_at ? [] : [n.id]);
         setOpen(false);
         if (n.task_id) onOpenTask(n.workspace_id, n.task_id);
+        else if (n.type === 'note') onOpenCalendar(n.workspace_id);
     };
 
     const workspaceName = (id: string) => workspaces.find(w => w.id === id)?.name;
@@ -143,7 +147,7 @@ export function NotificationBell({ onOpenTask }: NotificationBellProps) {
                                         <span className="flex-1 min-w-0">
                                             <span className="block text-sm text-text-main dark:text-slate-100">{headline(n)}</span>
                                             <span className="block text-sm font-medium text-text-main dark:text-slate-100 truncate">{n.title}</span>
-                                            {n.body && <span className="block text-xs text-text-muted line-clamp-2 mt-0.5">“{n.body}”</span>}
+                                            {n.body && n.type !== 'note' && <span className="block text-xs text-text-muted line-clamp-2 mt-0.5">“{n.body}”</span>}
                                             <span className="block text-xs text-text-muted mt-1">
                                                 {timeAgo(n.created_at)}
                                                 {showWorkspace && workspaceName(n.workspace_id) ? ` · ${workspaceName(n.workspace_id)}` : ''}

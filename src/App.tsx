@@ -613,7 +613,13 @@ function Dashboard() {
             <span className="hidden lg:inline text-sm">Search</span>
             <span className="hidden lg:inline"><Kbd>{modKey} K</Kbd></span>
           </button>
-          <NotificationBell onOpenTask={handleOpenTask} />
+          <NotificationBell
+            onOpenTask={handleOpenTask}
+            onOpenCalendar={(workspaceId) => {
+              if (workspaceId !== activeWorkspace?.id) setActiveWorkspaceById(workspaceId);
+              setCurrentView('calendar');
+            }}
+          />
           {currentView !== 'members' && currentView !== 'work_time' && currentView !== 'files' && currentMemberProfile?.permission_role !== 'viewer' && (
             <button
               onClick={() => {
@@ -656,7 +662,11 @@ function Dashboard() {
                   workspaceId={activeWorkspace.id}
                   tasks={tasks.filter(matchesFilters)}
                   canEdit={currentMemberProfile?.permission_role !== 'viewer'}
-                  canRemoveNote={(note) => role === 'owner' || role === 'admin' || (role === 'member' && note.created_by === user.id)}
+                  currentUserId={user.id}
+                  assignees={role === 'owner' || role === 'admin'
+                    ? members.filter(m => m.user_id && m.user_id !== user.id && m.status === 'active')
+                        .map(m => ({ userId: m.user_id!, label: m.email.split('@')[0] }))
+                    : undefined}
                   onReschedule={(taskId, dueDate) => handleTaskUpdate(taskId, { due_date: dueDate })}
                   onOpen={(task) => handleOpenTask(activeWorkspace.id, task.id)}
                 />}
