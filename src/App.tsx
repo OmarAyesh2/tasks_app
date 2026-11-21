@@ -18,6 +18,7 @@ import { Plus, Loader2, Menu } from 'lucide-react';
 import { supabase, deleteDriveAttachments, canDeleteFile } from './lib/supabase';
 import { FileBrowser } from './components/FileBrowser';
 import { NotificationBell } from './components/NotificationBell';
+import { CalendarView } from './components/CalendarView';
 import type { Task, Tool, Project, Client } from './types';
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy, arrayMove, useSortable } from '@dnd-kit/sortable';
@@ -57,7 +58,7 @@ function Dashboard() {
 
   const { user, loading: authLoading } = useAuth();
   const { activeWorkspace, currentMemberProfile, loading: workspaceLoading, setActiveWorkspaceById } = useWorkspace();
-  const [currentView, setCurrentView] = useState<'tasks' | 'completed' | 'tools' | 'members' | 'work_time' | 'clients' | 'files'>('tasks');
+  const [currentView, setCurrentView] = useState<'tasks' | 'completed' | 'calendar' | 'tools' | 'members' | 'work_time' | 'clients' | 'files'>('tasks');
   const [selectedMemberFilter, setSelectedMemberFilter] = useState<string>('all');
 
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -392,17 +393,35 @@ function Dashboard() {
     return <Auth />;
   }
 
-  const filteredTasks = tasks.filter(t => {
+  // project + member filters, shared by the task lists and the calendar
+  const matchesFilters = (t: Task) => {
     if (currentProjectId && t.project_id !== currentProjectId) return false;
-    
-    if (selectedMemberFilter === 'me') {
-      if (t.assigned_to_member !== currentMemberProfile?.id) return false;
-    } else if (selectedMemberFilter !== 'all') {
-      if (t.assigned_to_member !== selectedMemberFilter) return false;
-    }
+    if (selectedMemberFilter === 'me') return t.assigned_to_member === currentMemberProfile?.id;
+    if (selectedMemberFilter !== 'all') return t.assigned_to_member === selectedMemberFilter;
+    return true;
+  };
+  const filteredTasks = tasks.filter(t => matchesFilters(t) && (currentView === 'tasks' ? t.status === 'to_do' : t.status === 'done'));
 
-    return currentView === 'tasks' ? t.status === 'to_do' : t.status === 'done';
-  });
+  const memberFilter = (currentMemberProfile?.permission_role === 'owner' || currentMemberProfile?.permission_role === 'admin') && (
+    <div className="flex justify-end mb-4">
+      <select
+        value={selectedMemberFilter}
+        onChange={(e) => setSelectedMemberFilter(e.target.value)}
+        aria-label="Filter by member"
+        className="input-field w-full fold:w-auto text-sm py-1.5 cursor-pointer"
+      >
+        <option value="all">All Members</option>
+        <option value="me">Assigned to Me</option>
+        {members
+          .filter(m => m.user_id !== currentMemberProfile?.user_id)
+          .map(m => (
+            <option key={m.id} value={m.id}>
+              {m.member_title ? `${m.email.split('@')[0]} (${m.member_title})` : m.email.split('@')[0]}
+            </option>
+          ))}
+      </select>
+    </div>
+  );
 
   const filteredTools = tools.filter(t => {
     return selectedCategory === 'All' ? true : t.category === selectedCategory;
@@ -476,6 +495,7 @@ function Dashboard() {
                 <h1 className="text-2xl fold:text-3xl font-bold text-text-main dark:text-slate-100 capitalize">
                   {currentView === 'tasks' ? 'Tasks' 
                    : currentView === 'completed' ? 'Completed Tasks' 
+                   : currentView === 'calendar' ? 'Calendar'
                    : currentView === 'members' ? 'Members' 
                    : currentView === 'work_time' ? 'Work Time'
                    : currentView === 'clients' ? 'Clients'
@@ -493,6 +513,8 @@ function Dashboard() {
                   ? `You have ${filteredTasks.length} pending tasks`
                   : currentView === 'completed'
                     ? `You have completed ${filteredTasks.length} tasks`
+                    : currentView === 'calendar'
+                      ? 'Tasks by due date. Drag a task to reschedule it'
                     : currentView === 'members'
                       ? 'Manage your workspace team'
                       : currentView === 'work_time'
@@ -543,6 +565,16 @@ function Dashboard() {
               <WorkTime />
             ) : currentView === 'files' ? (
               <FileBrowser key={activeWorkspace?.id} />
+            ) : currentView === 'calendar' ? (
+              <div>
+                {memberFilter}
+                <CalendarView
+                  tasks={tasks.filter(matchesFilters)}
+                  canEdit={currentMemberProfile?.permission_role !== 'viewer'}
+                  onReschedule={(taskId, dueDate) => handleTaskUpdate(taskId, { due_date: dueDate })}
+                  onOpen={(task) => activeWorkspace && handleOpenTask(activeWorkspace.id, task.id)}
+                />
+              </div>
             ) : currentView === 'clients' ? (
               <div className="grid grid-cols-1 fold:grid-cols-2 lg:grid-cols-3 gap-6">
                 {clients.length === 0 ? (
@@ -615,26 +647,7 @@ function Dashboard() {
               </div>
             ) : (
               <div className="max-w-3xl xl:max-w-4xl">
-                {/* Task Filter for Owners/Admins */}
-                {(currentMemberProfile?.permission_role === 'owner' || currentMemberProfile?.permission_role === 'admin') && (
-                  <div className="flex justify-end mb-4">
-                    <select
-                      value={selectedMemberFilter}
-                      onChange={(e) => setSelectedMemberFilter(e.target.value)}
-                      className="input-field w-full fold:w-auto text-sm py-1.5 cursor-pointer"
-                    >
-                      <option value="all">All Members</option>
-                      <option value="me">Assigned to Me</option>
-                      {members
-                        .filter(m => m.user_id !== currentMemberProfile?.user_id)
-                        .map(m => (
-                        <option key={m.id} value={m.id}>
-                          {m.member_title ? `${m.email.split('@')[0]} (${m.member_title})` : m.email.split('@')[0]}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
+                {memberFilter}
 
                 <div className="space-y-4">
                   {filteredTasks.length === 0 ? (
