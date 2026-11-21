@@ -1,8 +1,10 @@
 import { useState, useRef, useEffect } from 'react';
-import type { Task, Project, TaskComment, TaskAsset } from '../types';
+import type { Task, TaskComment, TaskAsset } from '../types';
 import { ConfirmModal } from './ConfirmModal';
-import { Check, Link as LinkIcon, ExternalLink, Trash2, Library, Pencil, Loader2, Sparkles, Plus, X, Paperclip, File as FileIcon, User as UserIcon, GripVertical, MessageSquare, Send, ContactRound } from 'lucide-react';
-import { supabase, deleteDriveAttachment, canDeleteFile } from '../lib/supabase';
+import { Check, Link as LinkIcon, ExternalLink, Trash2, Library, Pencil, Loader2, Sparkles, Plus, X, Paperclip, File as FileIcon, FolderOpen, User as UserIcon, GripVertical, MessageSquare, Send, ContactRound } from 'lucide-react';
+import { supabase, canDeleteFile, driveFileId, openDriveFile } from '../lib/supabase';
+import { FileBrowser, type DriveItem } from './FileBrowser';
+import { Modal } from './Modal';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { useWorkspace, type WorkspaceMember } from '../context/WorkspaceContext';
@@ -11,7 +13,6 @@ import { useAuth } from '../context/AuthContext';
 interface TaskCardProps {
     task: Task;
     members: WorkspaceMember[];
-    projects: Project[];
     onStatusChange: (task: Task) => void;
     onUpdateTask: (taskId: string, updates: Partial<Task>) => void;
     onEdit: () => void;
@@ -20,7 +21,7 @@ interface TaskCardProps {
     dragHandleProps?: React.HTMLAttributes<HTMLElement>;
 }
 
-export function TaskCard({ task, members, projects, onStatusChange, onUpdateTask, onEdit, onDelete, isDragging, dragHandleProps }: TaskCardProps) {
+export function TaskCard({ task, members, onStatusChange, onUpdateTask, onEdit, onDelete, isDragging, dragHandleProps }: TaskCardProps) {
     const { activeWorkspace, currentMemberProfile } = useWorkspace();
     const { user } = useAuth();
     const [isGenerating, setIsGenerating] = useState(false);
@@ -28,6 +29,7 @@ export function TaskCard({ task, members, projects, onStatusChange, onUpdateTask
     const [isUploadingAsset, setIsUploadingAsset] = useState(false);
     const [uploadProgress, setUploadProgress] = useState(0);
     const [assetToDelete, setAssetToDelete] = useState<TaskAsset | null>(null);
+    const [isPickingFile, setIsPickingFile] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     // Comments state
@@ -170,20 +172,10 @@ Strictly return a JSON array of sub-task objects formatted exactly like this: [{
 
                 xhr.setRequestHeader('Authorization', `Bearer ${session.access_token}`);
                 xhr.setRequestHeader('apikey', import.meta.env.VITE_SUPABASE_ANON_KEY);
-                // Create FormData payload
+                // The function puts the file in this task's folder (<project>/<task>) in the workspace's Drive.
                 const formData = new FormData();
                 formData.append('file', file);
-                
-                const workspaceName = activeWorkspace?.name || 'Default Workspace';
-                const userEmail = user?.email || 'Unknown User';
-                const project = projects.find(p => p.id === task.project_id);
-                const projectName = project ? project.name : 'No Project';
-
-                formData.append('workspaceName', workspaceName);
-                formData.append('userEmail', userEmail);
-                formData.append('projectName', projectName);
                 formData.append('taskId', task.id);
-                formData.append('taskName', task.name);
 
                 xhr.upload.onprogress = (event) => {
                     if (event.lengthComputable) {
@@ -247,21 +239,12 @@ Strictly return a JSON array of sub-task objects formatted exactly like this: [{
         }
     };
 
+    // Removes the attachment from this task only; the file stays in the workspace Files page.
     const handleDeleteAsset = async (assetId: string) => {
         try {
             if (!supabase) return;
-            
-            const currentAssets = task.assets || [];
-            const attachment = currentAssets.find((item) => item.id === assetId);
-            
-            if (attachment && attachment.public_url) {
-                const { error: invokeError } = await deleteDriveAttachment(attachment.public_url);
-                if (invokeError) {
-                    console.error("Edge function deletion error:", invokeError);
-                    return;
-                }
-            }
 
+            const currentAssets = task.assets || [];
             const { error } = await supabase.from('task_assets').delete().eq('id', assetId);
 
             if (error) throw error;
@@ -270,8 +253,32 @@ Strictly return a JSON array of sub-task objects formatted exactly like this: [{
             onUpdateTask(task.id, { assets: updatedAssets });
         } catch (error) {
             console.error('Error deleting asset:', error);
-            alert('Failed to delete asset. Please try again.');
+            alert('Failed to remove the attachment. Please try again.');
         }
+    };
+
+    // Attach a file that already exists in the workspace Files page
+    const attachExisting = async (item: DriveItem) => {
+        setIsPickingFile(false);
+        if (!supabase || !item.webViewLink) return;
+        const currentAssets = task.assets || [];
+        if (currentAssets.some(a => driveFileId(a.public_url) === item.id)) return;
+        const { data, error } = await supabase
+            .from('task_assets')
+            .insert({ task_id: task.id, file_name: item.name, public_url: item.webViewLink, storage_path: 'google_drive' })
+            .select()
+            .single();
+        if (error) {
+            alert('Could not attach the file. Please try again.');
+            return;
+        }
+        onUpdateTask(task.id, { assets: [...currentAssets, data] });
+    };
+
+    const openAttachment = (asset: TaskAsset) => {
+        const fileId = driveFileId(asset.public_url);
+        if (!fileId || !activeWorkspace) return window.open(asset.public_url, '_blank', 'noopener');
+        openDriveFile(activeWorkspace.id, fileId, asset.file_name, asset.public_url).catch(e => alert(e.message));
     };
 
     const isDone = task.status === 'done';
@@ -493,6 +500,15 @@ Strictly return a JSON array of sub-task objects formatted exactly like this: [{
                                         : `Uploading ${uploadProgress}%`
                                     : 'Attach File'}
                             </button>
+                            <button
+                                type="button"
+                                onClick={() => setIsPickingFile(true)}
+                                disabled={isUploadingAsset}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded border border-dashed border-slate-300 dark:border-slate-600 text-slate-500 hover:text-primary hover:border-primary dark:text-slate-400 dark:hover:text-primary transition-all disabled:opacity-50 min-h-[44px] md:min-h-0"
+                            >
+                                <FolderOpen className="w-3.5 h-3.5" />
+                                From Files
+                            </button>
                         </div>
 
                         {task.assets && task.assets.length > 0 && (
@@ -503,6 +519,7 @@ Strictly return a JSON array of sub-task objects formatted exactly like this: [{
                                         href={asset.public_url}
                                         target="_blank"
                                         rel="noopener noreferrer"
+                                        onClick={(e) => { e.preventDefault(); openAttachment(asset); }}
                                         className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md bg-indigo-50/50 dark:bg-indigo-900/20 text-xs font-medium text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/40 transition-colors border border-indigo-100 dark:border-indigo-800/50 max-w-full"
                                     >
                                         <FileIcon className="w-3 h-3 flex-shrink-0" />
@@ -514,6 +531,7 @@ Strictly return a JSON array of sub-task objects formatted exactly like this: [{
                                                 e.stopPropagation();
                                                 setAssetToDelete(asset);
                                             }}
+                                            aria-label={`Remove ${asset.file_name} from this task`}
                                             className="p-0.5 ml-1 flex-shrink-0 text-indigo-400 hover:text-red-500 hover:bg-white/50 dark:hover:bg-dark-surface/50 rounded transition-colors"
                                         >
                                             <X className="w-3 h-3" />
@@ -661,9 +679,13 @@ Strictly return a JSON array of sub-task objects formatted exactly like this: [{
                     if (assetToDelete) handleDeleteAsset(assetToDelete.id);
                     setAssetToDelete(null);
                 }}
-                title="Delete Attachment"
-                message={`Are you sure you want to delete "${assetToDelete?.file_name}"? This action cannot be undone.`}
+                title="Remove Attachment"
+                message={`Remove "${assetToDelete?.file_name}" from this task? The file stays in the workspace Files page.`}
             />
+
+            <Modal isOpen={isPickingFile} onClose={() => setIsPickingFile(false)} title="Attach from Files">
+                <FileBrowser key={activeWorkspace?.id} onPick={attachExisting} />
+            </Modal>
         </div>
     );
 }

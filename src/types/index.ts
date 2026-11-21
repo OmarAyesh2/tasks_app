@@ -25,10 +25,9 @@ export type Link = {
 
 export type TaskAsset = {
     id: string;
-    task_id: string | null; // null once its task was deleted and the file was kept
+    task_id: string;
     workspace_id?: string;
     uploaded_by?: string | null;
-    task_name?: string | null; // label for files whose task was deleted
     file_name: string;
     public_url: string;
     storage_path?: string;

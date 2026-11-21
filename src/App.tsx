@@ -25,7 +25,6 @@ import { CSS } from '@dnd-kit/utilities';
 interface SortableTaskCardProps {
   task: Task;
   members: WorkspaceMember[];
-  projects: Project[];
   onStatusChange: (task: Task) => void;
   onUpdateTask: (taskId: string, updates: Partial<Task>) => void;
   onEdit: () => void;
@@ -482,7 +481,7 @@ function Dashboard() {
                         : currentView === 'clients'
                           ? 'Manage your workspace leads and active relationships'
                           : currentView === 'files'
-                            ? 'Every file attached in this workspace'
+                            ? 'This workspace\'s files, with a folder for every project'
                             : 'Your collection of useful resources'}
               </p>
             </div>
@@ -521,7 +520,7 @@ function Dashboard() {
             ) : currentView === 'work_time' ? (
               <WorkTime />
             ) : currentView === 'files' ? (
-              <FileBrowser />
+              <FileBrowser key={activeWorkspace?.id} />
             ) : currentView === 'clients' ? (
               <div className="grid grid-cols-1 fold:grid-cols-2 lg:grid-cols-3 gap-6">
                 {clients.length === 0 ? (
@@ -628,7 +627,6 @@ function Dashboard() {
                           key={task.id}
                           task={task}
                           members={members}
-                          projects={projects}
                           onStatusChange={handleTaskStatusChange}
                           onUpdateTask={handleTaskUpdate}
                           onEdit={() => {
@@ -646,7 +644,6 @@ function Dashboard() {
                       key={task.id}
                       task={task}
                       members={members}
-                      projects={projects}
                       onStatusChange={handleTaskStatusChange}
                       onUpdateTask={handleTaskUpdate}
                       onEdit={() => {

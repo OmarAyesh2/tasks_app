@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useWorkspace } from '../context/WorkspaceContext';
 import { ChevronDown, Plus, Loader2, Shield, Briefcase, Trash2 } from 'lucide-react';
-import { supabase, deleteDriveAttachments } from '../lib/supabase';
+import { supabase, driveAction } from '../lib/supabase';
 
 export function WorkspaceSelector() {
     const {
@@ -55,12 +55,8 @@ export function WorkspaceSelector() {
         if (!activeWorkspace) return;
         if (window.confirm("Are you sure you want to permanently delete this workspace? This will erase all tasks, projects, and data for everyone.")) {
             try {
-                // includes files kept from deleted tasks
-                const { data: assets } = await supabase!
-                    .from('task_assets')
-                    .select('public_url')
-                    .eq('workspace_id', activeWorkspace.id);
-                await deleteDriveAttachments((assets ?? []).map(a => a.public_url));
+                // the database cascade can't reach Drive, so trash the workspace's folder first
+                await driveAction({ action: 'trashWorkspace', workspaceId: activeWorkspace.id });
 
                 const { error } = await supabase!.from('workspaces').delete().eq('id', activeWorkspace.id);
                 if (error) throw error;
