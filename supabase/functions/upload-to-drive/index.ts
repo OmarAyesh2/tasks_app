@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { google } from "npm:googleapis@128.0.0";
+import { createClient } from "npm:@supabase/supabase-js@2.97.0";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -27,6 +28,16 @@ serve(async (req: Request) => {
     return new Response('ok', { headers: corsHeaders });
   }
 
+  // verify_jwt also accepts the public anon key, so require a real signed-in user.
+  // This client runs as the caller, so RLS decides what they may touch.
+  const userClient = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_ANON_KEY')!, {
+    global: { headers: { Authorization: req.headers.get('Authorization') ?? '' } },
+  });
+  const { data: { user } } = await userClient.auth.getUser();
+  if (!user) {
+    return new Response(JSON.stringify({ error: 'Sign in required' }), { status: 401, headers: corsHeaders });
+  }
+
   // Fetch OAuth2 Secrets (Used for both POST and DELETE)
   const clientId = Deno.env.get('GOOGLE_CLIENT_ID');
   const clientSecret = Deno.env.get('GOOGLE_CLIENT_SECRET');
@@ -44,8 +55,17 @@ serve(async (req: Request) => {
   if (req.method === 'DELETE') {
     try {
       const { fileId } = await req.json();
-      if (!fileId) {
-        return new Response(JSON.stringify({ error: "Missing fileId parameter" }), { status: 400, headers: corsHeaders });
+      if (!fileId || !/^[\w-]+$/.test(fileId)) {
+        return new Response(JSON.stringify({ error: "Missing or invalid fileId parameter" }), { status: 400, headers: corsHeaders });
+      }
+
+      // Delete the attachment row as the caller first: RLS only lets task editors do it,
+      // so a file nobody may edit is never removed from Drive. (The app's own row delete afterwards is a no-op.)
+      const { data: deleted, error: rowError } = await userClient
+        .from('task_assets').delete().like('public_url', `%/d/${fileId}/%`).select('id');
+      if (rowError) throw rowError;
+      if (!deleted || deleted.length === 0) {
+        return new Response(JSON.stringify({ error: "Not allowed to delete this file" }), { status: 403, headers: corsHeaders });
       }
 
       await drive.files.delete({ fileId: fileId });
@@ -72,6 +92,15 @@ serve(async (req: Request) => {
 
       if (!file || !workspaceName || !userEmail || !projectName || !taskId || !taskName) {
         return new Response(JSON.stringify({ error: "Missing required parameters" }), { status: 400, headers: corsHeaders });
+      }
+
+      // Only owners/admins/members who can see the task may attach to it.
+      const { data: task } = await userClient.from('tasks').select('workspace_id').eq('id', taskId).maybeSingle();
+      const { data: canEdit } = task
+        ? await userClient.rpc('check_workspace_access', { target_workspace_id: task.workspace_id, allowed_roles: ['owner', 'admin', 'member'] })
+        : { data: false };
+      if (!canEdit) {
+        return new Response(JSON.stringify({ error: "Not allowed to upload to this task" }), { status: 403, headers: corsHeaders });
       }
 
       const filename = file.name || 'untitled';

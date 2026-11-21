@@ -1,3 +1,4 @@
+-- OUTDATED: early snapshot only. The live schema (workspaces, members, RLS) lives in Supabase; see supabase/migrations/ for changes since.
 -- Enable UUID extension
 create extension if not exists "uuid-ossp";
 

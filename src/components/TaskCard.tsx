@@ -160,11 +160,15 @@ Strictly return a JSON array of sub-task objects formatted exactly like this: [{
         setIsUploadingAsset(true);
         setUploadProgress(0);
         try {
+            // The function needs the user's session token, not the public anon key.
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session) throw new Error('Your session expired. Please sign in again.');
+
             const driveUrl = await new Promise<string>((resolve, reject) => {
                 const xhr = new XMLHttpRequest();
                 xhr.open('POST', 'https://gaehkozgxxftdacfsxnf.supabase.co/functions/v1/upload-to-drive');
 
-                xhr.setRequestHeader('Authorization', `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`);
+                xhr.setRequestHeader('Authorization', `Bearer ${session.access_token}`);
                 xhr.setRequestHeader('apikey', import.meta.env.VITE_SUPABASE_ANON_KEY);
                 // Create FormData payload
                 const formData = new FormData();
