@@ -1,12 +1,13 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import {
-    ChevronRight, ClipboardPaste, Copy, Download, File as FileIcon, FileArchive, FileAudio, FileImage, FileSpreadsheet,
+    ChevronRight, ClipboardPaste, Copy, Eye, File as FileIcon, FileArchive, FileAudio, FileImage, FileSpreadsheet,
     FileText, FileVideo, FolderOpen, FolderPlus, Loader2, Lock, Palette, Pencil, Scissors, Search, Trash2, Upload, X,
 } from 'lucide-react';
-import { driveAction, driveUpload, openDriveFile } from '../lib/supabase';
+import { driveAction, driveUpload } from '../lib/supabase';
 import { useWorkspace } from '../context/WorkspaceContext';
 import { ConfirmModal } from './ConfirmModal';
 import { Modal } from './Modal';
+import { FileViewer, type ViewerFile } from './FileViewer';
 
 export type DriveItem = {
     id: string;
@@ -138,6 +139,7 @@ export function FileBrowser({ onPick }: FileBrowserProps) {
     const [toDelete, setToDelete] = useState<DriveItem | null>(null);
     const [colorMenuOpen, setColorMenuOpen] = useState(false);
     const [dragOver, setDragOver] = useState(false);
+    const [viewing, setViewing] = useState<{ files: ViewerFile[]; index: number } | null>(null);
     const uploadRef = useRef<HTMLInputElement>(null);
 
     // which folder/reload the shown listing belongs to; while they differ, the next folder is loading
@@ -199,7 +201,8 @@ export function FileBrowser({ onPick }: FileBrowserProps) {
     const openItem = (item: DriveItem) => {
         if (item.isFolder) return goTo(item.id);
         if (onPick) return onPick(item);
-        if (workspaceId) openDriveFile(workspaceId, item.id, item.name).catch(e => alert(e.message));
+        // the viewer steps through the files shown here, in the same order
+        setViewing({ files: files.map(f => ({ id: f.id, name: f.name })), index: Math.max(0, files.findIndex(f => f.id === item.id)) });
     };
 
     const onTileClick = (item: DriveItem) => {
@@ -254,7 +257,7 @@ export function FileBrowser({ onPick }: FileBrowserProps) {
 
     // Escape clears the selection, Delete asks to delete it (only when no dialog is open)
     useEffect(() => {
-        if (!selected || picking || naming || toDelete) return;
+        if (!selected || picking || naming || toDelete || viewing) return;
         const onKey = (e: KeyboardEvent) => {
             if ((e.target as HTMLElement)?.closest('input, textarea')) return;
             if (e.key === 'Escape') { setSelectedId(null); setColorMenuOpen(false); }
@@ -262,7 +265,7 @@ export function FileBrowser({ onPick }: FileBrowserProps) {
         };
         window.addEventListener('keydown', onKey);
         return () => window.removeEventListener('keydown', onKey);
-    }, [selected, picking, naming, toDelete]);
+    }, [selected, picking, naming, toDelete, viewing]);
 
     if (error && !listing) {
         return (
@@ -424,7 +427,7 @@ export function FileBrowser({ onPick }: FileBrowserProps) {
                     <div className="relative flex items-center gap-1 flex-wrap" aria-label={`Actions for ${selected.name}`}>
                         <span className="hidden sm:block max-w-[160px] truncate text-sm font-medium text-text-main dark:text-slate-100 mr-1">{selected.name}</span>
                         <button type="button" onClick={() => openItem(selected)} className={ghostButton}>
-                            {selected.isFolder ? <FolderOpen className="w-4 h-4" /> : <Download className="w-4 h-4" />}
+                            {selected.isFolder ? <FolderOpen className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                             Open
                         </button>
                         {selected.canModify && (
@@ -576,6 +579,10 @@ export function FileBrowser({ onPick }: FileBrowserProps) {
                 title={toDelete?.isFolder ? 'Delete Folder' : 'Delete File'}
                 message={`Delete "${toDelete?.name}"${toDelete?.isFolder ? ' and everything in it' : ''}? It goes to Drive's trash and is removed from any task it's attached to.`}
             />
+
+            {viewing && workspaceId && (
+                <FileViewer workspaceId={workspaceId} files={viewing.files} startIndex={viewing.index} onClose={() => setViewing(null)} />
+            )}
         </div>
     );
 }

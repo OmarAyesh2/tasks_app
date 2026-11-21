@@ -2,7 +2,8 @@ import { useState, useRef, useEffect } from 'react';
 import type { Task, TaskComment, TaskAsset } from '../types';
 import { ConfirmModal } from './ConfirmModal';
 import { Check, Link as LinkIcon, ExternalLink, Trash2, Library, Pencil, Loader2, Sparkles, Plus, X, Paperclip, File as FileIcon, FolderOpen, GripVertical, MessageSquare, Send, ContactRound, ChevronDown, CalendarDays } from 'lucide-react';
-import { supabase, canDeleteFile, driveFileId, openDriveFile } from '../lib/supabase';
+import { supabase, canDeleteFile, driveFileId } from '../lib/supabase';
+import { FileViewer, type ViewerFile } from './FileViewer';
 import { FileBrowser, type DriveItem } from './FileBrowser';
 import { Modal } from './Modal';
 import { clsx } from 'clsx';
@@ -67,6 +68,7 @@ export function TaskCard({ task, members, onStatusChange, onUpdateTask, onEdit, 
     }, [showComments]);
 
     const assignee = members.find(m => m.id === task.assigned_to_member);
+    const [viewing, setViewing] = useState<{ files: ViewerFile[]; index: number } | null>(null);
     const [expanded, setExpanded] = useState(false); // collapsed cards keep the list scannable
 
     const totalSteps = task.sub_tasks?.length ?? 0;
@@ -295,7 +297,12 @@ Strictly return a JSON array of sub-task objects formatted exactly like this: [{
     const openAttachment = (asset: TaskAsset) => {
         const fileId = driveFileId(asset.public_url);
         if (!fileId || !activeWorkspace) return window.open(asset.public_url, '_blank', 'noopener');
-        openDriveFile(activeWorkspace.id, fileId, asset.file_name, asset.public_url).catch(e => alert(e.message));
+        // step through this task's Drive attachments; old-account files fall back to their Drive link
+        const files = (task.assets ?? []).flatMap(a => {
+            const id = driveFileId(a.public_url);
+            return id ? [{ id, name: a.file_name, fallbackUrl: a.public_url }] : [];
+        });
+        setViewing({ files, index: Math.max(0, files.findIndex(f => f.id === fileId)) });
     };
 
     const isDone = task.status === 'done';
@@ -737,6 +744,10 @@ Strictly return a JSON array of sub-task objects formatted exactly like this: [{
             <Modal isOpen={isPickingFile} onClose={() => setIsPickingFile(false)} title="Attach from Files">
                 <FileBrowser key={activeWorkspace?.id} onPick={attachExisting} />
             </Modal>
+
+            {viewing && activeWorkspace && (
+                <FileViewer workspaceId={activeWorkspace.id} files={viewing.files} startIndex={viewing.index} onClose={() => setViewing(null)} />
+            )}
         </article>
     );
 }

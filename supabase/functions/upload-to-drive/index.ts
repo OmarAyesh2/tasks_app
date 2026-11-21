@@ -9,10 +9,40 @@ import { createClient } from "npm:@supabase/supabase-js@2.97.0";
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'apikey, authorization, x-client-info, content-type',
-  'Access-Control-Allow-Methods': 'POST, DELETE, OPTIONS',
+  'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
   'Access-Control-Expose-Headers': 'content-disposition, content-type',
 };
 const FOLDER = 'application/vnd.google-apps.folder';
+// Office files Drive can convert; previews convert a temporary copy, then export it as PDF
+const CONVERTIBLE: Record<string, string> = {
+  'application/msword': 'document',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'document',
+  'application/vnd.oasis.opendocument.text': 'document',
+  'application/rtf': 'document',
+  'application/vnd.ms-excel': 'spreadsheet',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'spreadsheet',
+  'application/vnd.oasis.opendocument.spreadsheet': 'spreadsheet',
+  'application/vnd.ms-powerpoint': 'presentation',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'presentation',
+  'application/vnd.oasis.opendocument.presentation': 'presentation',
+};
+const EXPORTABLE = /^application\/vnd\.google-apps\.(document|spreadsheet|presentation|drawing)$/;
+const PREVIEW_TTL = 2 * 60 * 60; // seconds a preview link works
+
+// Preview links: <video>/<img>/<iframe> can't send the login header, so the function signs a
+// short-lived link for one file after checking access. Signed with the service key, which never leaves the server.
+const hmacKey = crypto.subtle.importKey('raw', new TextEncoder().encode(Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!),
+  { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+const sign = async (data: string) => {
+  const sig = await crypto.subtle.sign('HMAC', await hmacKey, new TextEncoder().encode(data));
+  return btoa(String.fromCharCode(...new Uint8Array(sig))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+};
+const sameString = (a: string, b: string) => {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+};
 // keep in sync with FOLDER_COLORS in src/components/FileBrowser.tsx
 const FOLDER_COLORS = ['sky', 'blue', 'lavender', 'violet', 'green', 'yellow', 'orange', 'red', 'pink', 'gray'];
 
@@ -39,11 +69,66 @@ const checkName = (name: unknown) => {
   return s;
 };
 
+// GET ?t=<signed link>: streams one file for the in-app viewer (Range requests let videos seek).
+const servePreview = async (req: Request) => {
+  const params = new URL(req.url).searchParams;
+  const [fileId, mode, exp, sig] = (params.get('t') ?? '').split('.');
+  const name = (params.get('n') ?? 'file').slice(0, 255); // display name only, not part of the signature
+  const valid = fileId && mode && exp && sig && /^[\w-]+$/.test(fileId) && Number(exp) > Date.now() / 1000
+    && sameString(sig, await sign(`${fileId}.${mode}.${exp}`));
+  if (!valid) return new Response('This preview link has expired', { status: 403, headers: corsHeaders });
+
+  const bearer = { Authorization: `Bearer ${(await auth.getAccessToken()).token}` };
+  const api = 'https://www.googleapis.com/drive/v3/files';
+  const headers: Record<string, string> = {
+    ...corsHeaders, 'Content-Disposition': `inline; filename*=UTF-8''${encodeURIComponent(mode === 'r' ? name : `${name}.pdf`)}`, 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'private, max-age=3600',
+  };
+  const pdf = async (id: string) => {
+    const res = await fetch(`${api}/${id}/export?mimeType=application/pdf`, { headers: bearer });
+    if (!res.ok) throw new Error(`export failed: ${res.status} ${await res.text()}`);
+    return res;
+  };
+
+  try {
+    if (mode === 'r') {
+      const range = req.headers.get('range');
+      const res = await fetch(`${api}/${fileId}?alt=media`, { headers: range ? { ...bearer, Range: range } : bearer });
+      if (!res.ok) return new Response('Could not read the file', { status: res.status === 404 ? 404 : 502, headers: corsHeaders });
+      let type = res.headers.get('content-type') ?? 'application/octet-stream';
+      // pages and scripts are shown as text, never run on this origin
+      if (/html|javascript|xml/.test(type) && type !== 'image/svg+xml') type = 'text/plain; charset=utf-8';
+      if (!type.includes('pdf')) headers['Content-Security-Policy'] = 'sandbox'; // Chrome's PDF viewer can't run sandboxed
+      for (const h of ['content-length', 'content-range', 'accept-ranges']) {
+        const v = res.headers.get(h);
+        if (v) headers[h] = v;
+      }
+      return new Response(res.body, { status: res.status, headers: { ...headers, 'Content-Type': type } });
+    }
+    headers['Content-Type'] = 'application/pdf';
+    if (mode === 'e') return new Response((await pdf(fileId)).body, { headers });
+    if (!['document', 'spreadsheet', 'presentation'].includes(mode)) throw new Error('unknown preview mode');
+    // Office file: convert a temporary copy, export it, then delete the copy for good
+    const { data: copy } = await drive.files.copy({
+      fileId, fields: 'id',
+      requestBody: { name, mimeType: `application/vnd.google-apps.${mode}`, parents: [Deno.env.get('GOOGLE_DRIVE_ROOT_FOLDER_ID')!] },
+    });
+    try {
+      return new Response(await (await pdf(copy.id!)).arrayBuffer(), { headers });
+    } finally {
+      await drive.files.delete({ fileId: copy.id! }).catch((e: any) => console.error('Preview copy not deleted:', copy.id, e?.message));
+    }
+  } catch (e: any) {
+    console.error('Preview failed:', e?.message);
+    return new Response('Could not preview this file', { status: 502, headers: corsHeaders });
+  }
+};
+
 serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
+  if (req.method === 'GET') return servePreview(req); // authorized by the signed link, not a login
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-  // verify_jwt also accepts the public anon key, so require a real signed-in user.
+  // Deployed with verify_jwt off (preview links carry no login), so this check is the gate: a real signed-in user.
   // This client runs as the caller, so RLS decides what they may read.
   const userClient = createClient(supabaseUrl, Deno.env.get('SUPABASE_ANON_KEY')!, {
     global: { headers: { Authorization: req.headers.get('Authorization') ?? '' } },
@@ -376,6 +461,20 @@ serve(async (req: Request) => {
           'Content-Type': native ? 'application/pdf' : (res.headers.get('content-type') ?? 'application/octet-stream'),
           'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(name)}`,
         },
+      });
+    },
+
+    // a signed link the in-app viewer loads directly; mimeType is what the link returns
+    preview: async ({ workspaceId, fileId }) => {
+      const ws = checkId(workspaceId);
+      await roleIn(ws);
+      const { item } = await locate(ws, fileId);
+      if (item.mimeType === FOLDER) throw new HttpError(400, 'Folders cannot be previewed');
+      const mode = EXPORTABLE.test(item.mimeType) ? 'e' : CONVERTIBLE[item.mimeType] ?? 'r';
+      const payload = `${item.id}.${mode}.${Math.floor(Date.now() / 1000) + PREVIEW_TTL}`;
+      return json({
+        url: `${supabaseUrl}/functions/v1/upload-to-drive?t=${payload}.${await sign(payload)}&n=${encodeURIComponent(item.name)}`,
+        mimeType: mode === 'r' ? item.mimeType : 'application/pdf',
       });
     },
 

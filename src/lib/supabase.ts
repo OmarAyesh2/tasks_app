@@ -57,34 +57,16 @@ export async function driveUpload(workspaceId: string, folderId: string, file: F
     return driveJson<{ id: string; url: string; name: string }>(await driveFetch(form));
 }
 
-// Opens a Drive file through the app, so members without Drive access can see it.
-// Images, PDFs, text and media open in a new tab; anything else downloads.
-export async function openDriveFile(workspaceId: string, fileId: string, name: string, fallbackUrl?: string) {
-    const tab = window.open('', '_blank'); // opened during the click, otherwise browsers block it
-    try {
-        const res = await driveFetch(...jsonBody({ action: 'download', workspaceId, fileId }));
-        // files from before the Drive switch aren't reachable by the app; their Drive link still works for their owner
-        if (res.status === 404 && fallbackUrl) {
-            if (tab) tab.location.href = fallbackUrl;
-            return;
-        }
-        if (!res.ok) await driveJson(res);
-        const blob = await res.blob();
-        const url = URL.createObjectURL(blob);
-        if (tab && /^(image|video|audio|text)\/|^application\/pdf$/.test(blob.type)) {
-            tab.location.href = url;
-        } else {
-            tab?.close();
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = name;
-            a.click();
-        }
-        setTimeout(() => URL.revokeObjectURL(url), 60_000);
-    } catch (e) {
-        tab?.close();
-        throw e;
-    }
+// Downloads a Drive file through the app (Google Docs etc. arrive as PDF).
+export async function downloadDriveFile(workspaceId: string, fileId: string, name: string) {
+    const res = await driveFetch(...jsonBody({ action: 'download', workspaceId, fileId }));
+    if (!res.ok) await driveJson(res);
+    const url = URL.createObjectURL(await res.blob());
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = name;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
 // Drive files are not removed by the database cascade, so clear them before deleting their parent.
