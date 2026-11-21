@@ -9,9 +9,11 @@ const corsHeaders = {
 };
 
 async function getOrCreateFolder(drive: any, folderName: string, parentId: string, exactMatch: boolean = true) {
+  // Drive query strings need both \ and ' escaped (backslash first)
+  const escaped = folderName.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
   const query = exactMatch
-    ? `name = '${folderName.replace(/'/g, "\\'")}' and '${parentId}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false`
-    : `name contains '${folderName.replace(/'/g, "\\'")}' and '${parentId}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false`;
+    ? `name = '${escaped}' and '${parentId}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false`
+    : `name contains '${escaped}' and '${parentId}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false`;
 
   const res = await drive.files.list({ q: query, spaces: 'drive', fields: 'files(id, name)' });
   if (res.data.files && res.data.files.length > 0) return res.data.files[0].id;

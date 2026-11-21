@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import type { Task, Project, TaskComment, TaskAsset } from '../types';
 import { ConfirmModal } from './ConfirmModal';
 import { Check, Link as LinkIcon, ExternalLink, Trash2, Library, Pencil, Loader2, Sparkles, Plus, X, Paperclip, File as FileIcon, User as UserIcon, GripVertical, MessageSquare, Send, ContactRound } from 'lucide-react';
-import { supabase } from '../lib/supabase';
+import { supabase, deleteDriveAttachment } from '../lib/supabase';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { useWorkspace, type WorkspaceMember } from '../context/WorkspaceContext';
@@ -255,17 +255,10 @@ Strictly return a JSON array of sub-task objects formatted exactly like this: [{
             const attachment = currentAssets.find((item) => item.id === assetId);
             
             if (attachment && attachment.public_url) {
-                const googleDriveFileId = attachment.public_url.match(/\/file\/d\/([^/]+)/)?.[1];
-                if (googleDriveFileId) {
-                    const { error: invokeError } = await supabase.functions.invoke('upload-to-drive', {
-                        method: 'DELETE',
-                        body: { fileId: googleDriveFileId }
-                    });
-
-                    if (invokeError) {
-                        console.error("Edge function deletion error:", invokeError);
-                        return;
-                    }
+                const { error: invokeError } = await deleteDriveAttachment(attachment.public_url);
+                if (invokeError) {
+                    console.error("Edge function deletion error:", invokeError);
+                    return;
                 }
             }
 

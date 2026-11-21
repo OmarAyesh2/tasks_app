@@ -15,7 +15,7 @@ import { ConfirmModal } from './components/ConfirmModal';
 import { MemberManagement } from './components/MemberManagement';
 import { WorkTime } from './components/WorkTime';
 import { Plus, Loader2, Menu } from 'lucide-react';
-import { supabase } from './lib/supabase';
+import { supabase, deleteDriveAttachments } from './lib/supabase';
 import type { Task, Tool, Project, Client } from './types';
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy, arrayMove, useSortable } from '@dnd-kit/sortable';
@@ -299,6 +299,8 @@ function Dashboard() {
     if (type === 'task') {
       setTasks(tasks.filter(t => t.id !== item.id));
       setDeleteConfig(prev => ({ ...prev, isOpen: false })); // Close immediately for smooth UX
+
+      await deleteDriveAttachments(((item as Task).assets ?? []).map(a => a.public_url));
 
       const { error } = await supabase
         .from('tasks')
