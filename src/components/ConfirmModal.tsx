@@ -8,6 +8,7 @@ interface ConfirmModalProps {
     title: string;
     message: string;
     isLoading?: boolean;
+    children?: React.ReactNode; // extra options shown under the message
 }
 
 export function ConfirmModal({
@@ -16,7 +17,8 @@ export function ConfirmModal({
     onConfirm,
     title,
     message,
-    isLoading
+    isLoading,
+    children
 }: ConfirmModalProps) {
     return (
         <Modal isOpen={isOpen} onClose={onClose} title={title}>
@@ -30,6 +32,8 @@ export function ConfirmModal({
                         <p className="text-text-muted mt-1">{message}</p>
                     </div>
                 </div>
+
+                {children}
 
                 <div className="pt-4 flex justify-end gap-3">
                     <button

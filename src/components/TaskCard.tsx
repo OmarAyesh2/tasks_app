@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import type { Task, Project, TaskComment, TaskAsset } from '../types';
 import { ConfirmModal } from './ConfirmModal';
 import { Check, Link as LinkIcon, ExternalLink, Trash2, Library, Pencil, Loader2, Sparkles, Plus, X, Paperclip, File as FileIcon, User as UserIcon, GripVertical, MessageSquare, Send, ContactRound } from 'lucide-react';
-import { supabase, deleteDriveAttachment } from '../lib/supabase';
+import { supabase, deleteDriveAttachment, canDeleteFile } from '../lib/supabase';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { useWorkspace, type WorkspaceMember } from '../context/WorkspaceContext';
@@ -21,7 +21,7 @@ interface TaskCardProps {
 }
 
 export function TaskCard({ task, members, projects, onStatusChange, onUpdateTask, onEdit, onDelete, isDragging, dragHandleProps }: TaskCardProps) {
-    const { activeWorkspace } = useWorkspace();
+    const { activeWorkspace, currentMemberProfile } = useWorkspace();
     const { user } = useAuth();
     const [isGenerating, setIsGenerating] = useState(false);
     const [newStepText, setNewStepText] = useState('');
@@ -507,7 +507,7 @@ Strictly return a JSON array of sub-task objects formatted exactly like this: [{
                                     >
                                         <FileIcon className="w-3 h-3 flex-shrink-0" />
                                         <span className="truncate max-w-[120px] sm:max-w-[180px]">{asset.file_name}</span>
-                                        <button
+                                        {canDeleteFile(asset.uploaded_by, currentMemberProfile?.permission_role, user?.id) && <button
                                             type="button"
                                             onClick={(e) => {
                                                 e.preventDefault();
@@ -517,7 +517,7 @@ Strictly return a JSON array of sub-task objects formatted exactly like this: [{
                                             className="p-0.5 ml-1 flex-shrink-0 text-indigo-400 hover:text-red-500 hover:bg-white/50 dark:hover:bg-dark-surface/50 rounded transition-colors"
                                         >
                                             <X className="w-3 h-3" />
-                                        </button>
+                                        </button>}
                                     </a>
                                 ))}
                             </div>

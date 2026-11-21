@@ -55,10 +55,11 @@ export function WorkspaceSelector() {
         if (!activeWorkspace) return;
         if (window.confirm("Are you sure you want to permanently delete this workspace? This will erase all tasks, projects, and data for everyone.")) {
             try {
+                // includes files kept from deleted tasks
                 const { data: assets } = await supabase!
                     .from('task_assets')
-                    .select('public_url, tasks!inner(workspace_id)')
-                    .eq('tasks.workspace_id', activeWorkspace.id);
+                    .select('public_url')
+                    .eq('workspace_id', activeWorkspace.id);
                 await deleteDriveAttachments((assets ?? []).map(a => a.public_url));
 
                 const { error } = await supabase!.from('workspaces').delete().eq('id', activeWorkspace.id);

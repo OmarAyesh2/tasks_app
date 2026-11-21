@@ -15,7 +15,8 @@ import { ConfirmModal } from './components/ConfirmModal';
 import { MemberManagement } from './components/MemberManagement';
 import { WorkTime } from './components/WorkTime';
 import { Plus, Loader2, Menu } from 'lucide-react';
-import { supabase, deleteDriveAttachments } from './lib/supabase';
+import { supabase, deleteDriveAttachments, canDeleteFile } from './lib/supabase';
+import { FileBrowser } from './components/FileBrowser';
 import type { Task, Tool, Project, Client } from './types';
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy, arrayMove, useSortable } from '@dnd-kit/sortable';
@@ -55,7 +56,7 @@ function Dashboard() {
 
   const { user, loading: authLoading } = useAuth();
   const { activeWorkspace, currentMemberProfile, loading: workspaceLoading } = useWorkspace();
-  const [currentView, setCurrentView] = useState<'tasks' | 'completed' | 'tools' | 'members' | 'work_time' | 'clients'>('tasks');
+  const [currentView, setCurrentView] = useState<'tasks' | 'completed' | 'tools' | 'members' | 'work_time' | 'clients' | 'files'>('tasks');
   const [selectedMemberFilter, setSelectedMemberFilter] = useState<string>('all');
 
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -275,7 +276,14 @@ function Dashboard() {
 
   const uniqueCategories = ['All', ...Array.from(new Set(tools.map(t => t.category).filter(Boolean) as string[])).sort()];
 
+  // Files the current user may delete along with the task being deleted (kept files stay in the Files page)
+  const [deleteTaskFiles, setDeleteTaskFiles] = useState(false);
+  const deletableTaskFiles = deleteConfig.type === 'task'
+    ? ((deleteConfig.item as Task | null)?.assets ?? []).filter(a => canDeleteFile(a.uploaded_by, currentMemberProfile?.permission_role, user?.id))
+    : [];
+
   const handleDeleteTask = (task: Task) => {
+    setDeleteTaskFiles(false);
     setDeleteConfig({
       isOpen: true,
       type: 'task',
@@ -300,7 +308,7 @@ function Dashboard() {
       setTasks(tasks.filter(t => t.id !== item.id));
       setDeleteConfig(prev => ({ ...prev, isOpen: false })); // Close immediately for smooth UX
 
-      await deleteDriveAttachments(((item as Task).assets ?? []).map(a => a.public_url));
+      if (deleteTaskFiles) await deleteDriveAttachments(deletableTaskFiles.map(a => a.public_url));
 
       const { error } = await supabase
         .from('tasks')
@@ -453,6 +461,7 @@ function Dashboard() {
                    : currentView === 'members' ? 'Members' 
                    : currentView === 'work_time' ? 'Work Time'
                    : currentView === 'clients' ? 'Clients'
+                   : currentView === 'files' ? 'Files'
                    : 'Resources'}
                 </h1>
                 {currentProjectName && (
@@ -472,12 +481,14 @@ function Dashboard() {
                         ? 'Track your daily work hours'
                         : currentView === 'clients'
                           ? 'Manage your workspace leads and active relationships'
-                          : 'Your collection of useful resources'}
+                          : currentView === 'files'
+                            ? 'Every file attached in this workspace'
+                            : 'Your collection of useful resources'}
               </p>
             </div>
           </div>
 
-          {currentView !== 'members' && currentView !== 'work_time' && currentMemberProfile?.permission_role !== 'viewer' && (
+          {currentView !== 'members' && currentView !== 'work_time' && currentView !== 'files' && currentMemberProfile?.permission_role !== 'viewer' && (
             <button
               onClick={() => {
                 if (currentView === 'tools') {
@@ -509,6 +520,8 @@ function Dashboard() {
               <MemberManagement />
             ) : currentView === 'work_time' ? (
               <WorkTime />
+            ) : currentView === 'files' ? (
+              <FileBrowser />
             ) : currentView === 'clients' ? (
               <div className="grid grid-cols-1 fold:grid-cols-2 lg:grid-cols-3 gap-6">
                 {clients.length === 0 ? (
@@ -697,7 +710,22 @@ function Dashboard() {
           onConfirm={confirmDelete}
           title={deleteConfig.type === 'task' ? 'Delete Task' : 'Delete Resource'}
           message={`Are you sure you want to delete "${deleteConfig.item?.name}"? This action cannot be undone.`}
-        />
+        >
+          {deletableTaskFiles.length > 0 && (
+            <label className="flex items-start gap-3 p-3 rounded-lg bg-slate-50 dark:bg-slate-800/50 text-sm text-text-main dark:text-slate-200 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={deleteTaskFiles}
+                onChange={(e) => setDeleteTaskFiles(e.target.checked)}
+                className="mt-0.5 w-4 h-4 accent-red-500"
+              />
+              <span>
+                Also delete {deletableTaskFiles.length === 1 ? 'its attached file' : `its ${deletableTaskFiles.length} attached files`} from Google Drive
+                <span className="block text-xs text-text-muted mt-0.5">Leave unchecked to keep them in the Files page.</span>
+              </span>
+            </label>
+          )}
+        </ConfirmModal>
       </main>
     </div>
   );

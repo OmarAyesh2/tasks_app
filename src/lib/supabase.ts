@@ -11,6 +11,11 @@ export const supabase = (supabaseUrl && supabaseAnonKey)
     ? createClient(supabaseUrl, supabaseAnonKey)
     : null;
 
+// Mirrors the task_assets delete rule: owners/admins any file, members only their own uploads.
+export function canDeleteFile(uploadedBy: string | null | undefined, role: string | undefined, userId: string | undefined) {
+    return role === 'owner' || role === 'admin' || (role === 'member' && !!userId && uploadedBy === userId);
+}
+
 // Deletes an attachment's Google Drive file; the function also removes its task_assets row.
 export async function deleteDriveAttachment(publicUrl: string) {
     const fileId = publicUrl.match(/\/file\/d\/([^/]+)/)?.[1];
