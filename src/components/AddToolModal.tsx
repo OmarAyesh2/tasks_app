@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Modal } from './Modal';
+import { Modal, ModalActions } from './Modal';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
-import { Loader2 } from 'lucide-react';
 import type { Tool } from '../types';
 
 interface AddToolModalProps {
@@ -10,15 +9,24 @@ interface AddToolModalProps {
     onClose: () => void;
     onSuccess: () => void;
     toolToEdit?: Tool | null;
+    categories?: string[]; // categories already in use, offered as suggestions
 }
 
-export function AddToolModal({ isOpen, onClose, onSuccess, toolToEdit }: AddToolModalProps) {
+const FORM_ID = 'resource-form';
+const DEFAULT_CATEGORIES = ['AI Tools', 'Design Reference', 'Assets', 'Legal'];
+const labelClass = 'block text-sm font-medium text-text-muted dark:text-slate-400 mb-1';
+
+export function AddToolModal({ isOpen, onClose, onSuccess, toolToEdit, categories = [] }: AddToolModalProps) {
     const { user } = useAuth();
     const [loading, setLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [dirty, setDirty] = useState(false);
     const [name, setName] = useState('');
     const [description, setDescription] = useState('');
     const [link, setLink] = useState('');
     const [category, setCategory] = useState('');
+
+    const suggestions = [...new Set([...categories, ...DEFAULT_CATEGORIES])].sort();
 
     const resetForm = () => {
         setName('');
@@ -29,6 +37,8 @@ export function AddToolModal({ isOpen, onClose, onSuccess, toolToEdit }: AddTool
 
     useEffect(() => {
         if (isOpen) {
+            setError(null);
+            setDirty(false);
             if (toolToEdit) {
                 setName(toolToEdit.name);
                 setDescription(toolToEdit.description || '');
@@ -40,11 +50,18 @@ export function AddToolModal({ isOpen, onClose, onSuccess, toolToEdit }: AddTool
         }
     }, [isOpen, toolToEdit]);
 
+    // pasting a URL fills an empty name with the site, e.g. "figma.com"
+    const fillNameFromLink = () => {
+        if (name.trim()) return;
+        try { setName(new URL(link).hostname.replace(/^www\./, '')); } catch { /* not a full URL yet */ }
+    };
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!user || !supabase) return;
 
         setLoading(true);
+        setError(null);
         try {
             if (toolToEdit) {
                 const { error } = await supabase.from('tools').update({
@@ -70,86 +87,84 @@ export function AddToolModal({ isOpen, onClose, onSuccess, toolToEdit }: AddTool
             onSuccess();
             resetForm();
             onClose();
-        } catch (error) {
-            console.error('Error adding resource:', error);
+        } catch (err) {
+            console.error('Error adding resource:', err);
+            setError('Could not save the resource. Check your connection and try again.');
         } finally {
             setLoading(false);
         }
     };
 
     return (
-        <Modal isOpen={isOpen} onClose={onClose} title={toolToEdit ? "Edit Resource" : "New Resource"}>
-            <form onSubmit={handleSubmit} className="space-y-4">
+        <Modal
+            isOpen={isOpen}
+            onClose={onClose}
+            title={toolToEdit ? 'Edit Resource' : 'New Resource'}
+            confirmClose={dirty}
+            footer={
+                <ModalActions
+                    formId={FORM_ID}
+                    onCancel={onClose}
+                    submitLabel={toolToEdit ? 'Save Changes' : 'Add Resource'}
+                    loading={loading}
+                    error={error}
+                />
+            }
+        >
+            <form id={FORM_ID} onSubmit={handleSubmit} onChange={() => setDirty(true)} className="space-y-4">
                 <div>
-                    <label className="block text-sm font-medium text-text-muted mb-1">Resource Name</label>
+                    <label htmlFor="resource-url" className={labelClass}>URL</label>
                     <input
+                        id="resource-url"
+                        type="url"
+                        value={link}
+                        onChange={(e) => setLink(e.target.value)}
+                        onBlur={fillNameFromLink}
+                        className="input-field"
+                        placeholder="https://..."
+                        required
+                        autoFocus
+                    />
+                </div>
+
+                <div>
+                    <label htmlFor="resource-name" className={labelClass}>Name</label>
+                    <input
+                        id="resource-name"
                         type="text"
                         value={name}
                         onChange={(e) => setName(e.target.value)}
                         className="input-field"
-                        placeholder="Resource Name"
+                        placeholder="Filled from the URL, or type your own"
                         required
                     />
                 </div>
 
-
-
                 <div>
-                    <label className="block text-sm font-medium text-text-muted mb-1">Category</label>
+                    <label htmlFor="resource-category" className={labelClass}>Category</label>
                     <input
+                        id="resource-category"
                         type="text"
                         list="resource-categories"
                         value={category}
                         onChange={(e) => setCategory(e.target.value)}
                         className="input-field"
-                        placeholder="e.g. AI Tools, Design Reference..."
+                        placeholder="Pick one or type a new category"
                     />
                     <datalist id="resource-categories">
-                        <option value="AI Tools" />
-                        <option value="Design Reference" />
-                        <option value="Assets" />
-                        <option value="Legal" />
+                        {suggestions.map(c => <option key={c} value={c} />)}
                     </datalist>
                 </div>
 
                 <div>
-                    <label className="block text-sm font-medium text-text-muted mb-1">Description</label>
+                    <label htmlFor="resource-description" className={labelClass}>Description</label>
                     <textarea
+                        id="resource-description"
                         value={description}
                         onChange={(e) => setDescription(e.target.value)}
-                        className="input-field min-h-[100px] resize-none"
+                        className="input-field min-h-[100px] resize-y"
                         placeholder="What is this resource for?"
                     />
-                </div>
-
-                <div>
-                    <label className="block text-sm font-medium text-text-muted mb-1">URL</label>
-                    <input
-                        type="url"
-                        value={link}
-                        onChange={(e) => setLink(e.target.value)}
-                        className="input-field"
-                        placeholder="https://..."
-                        required
-                    />
-                </div>
-
-                <div className="pt-4 flex justify-end gap-3">
-                    <button
-                        type="button"
-                        onClick={onClose}
-                        className="px-4 py-2 text-text-muted hover:text-text-main dark:text-slate-400 dark:hover:text-slate-100 font-medium transition-colors"
-                    >
-                        Cancel
-                    </button>
-                    <button
-                        type="submit"
-                        disabled={loading}
-                        className="btn-primary flex items-center gap-2"
-                    >
-                        {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-                        {toolToEdit ? "Save Changes" : "Add Resource"}
-                    </button>
                 </div>
             </form>
         </Modal>

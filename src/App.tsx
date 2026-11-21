@@ -682,6 +682,7 @@ function Dashboard() {
             setToolToEdit(null);
           }}
           onSuccess={fetchTools}
+          categories={uniqueCategories.filter(c => c !== 'All')}
           toolToEdit={toolToEdit}
         />
 

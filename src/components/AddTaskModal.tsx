@@ -1,9 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Modal } from './Modal';
+import { Modal, ModalActions } from './Modal';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import { useWorkspace } from '../context/WorkspaceContext';
-import { Plus, X, Loader2, ChevronDown, Wrench, Search } from 'lucide-react';
+import { Plus, X, ChevronDown, Wrench, Search } from 'lucide-react';
 import type { Link, Tool, Task, Project, Client } from '../types';
 import type { WorkspaceMember } from '../context/WorkspaceContext';
 
@@ -24,10 +24,20 @@ interface AddTaskModalProps {
     clients?: Client[];
 }
 
+const FORM_ID = 'task-form';
+const labelClass = 'block text-sm font-medium text-text-muted dark:text-slate-400 mb-1';
+
+// a link added without a name is labelled with its site, e.g. "figma.com"
+const siteName = (url: string) => {
+    try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return url; }
+};
+
 export function AddTaskModal({ isOpen, onClose, onSuccess, tools, members, taskToEdit, projects, defaultProjectId, clients }: AddTaskModalProps) {
     const { user } = useAuth();
     const { activeWorkspace } = useWorkspace();
     const [loading, setLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [dirty, setDirty] = useState(false);
     const [name, setName] = useState('');
     const [description, setDescription] = useState('');
     const [links, setLinks] = useState<Link[]>([]);
@@ -55,6 +65,8 @@ export function AddTaskModal({ isOpen, onClose, onSuccess, tools, members, taskT
     // Pre-fill form when editing
     useEffect(() => {
         if (isOpen) {
+            setError(null);
+            setDirty(false);
             if (taskToEdit) {
                 setName(taskToEdit.name);
                 setDescription(taskToEdit.description || '');
@@ -103,19 +115,32 @@ export function AddTaskModal({ isOpen, onClose, onSuccess, tools, members, taskT
         setInlineToolLink('');
     };
 
+    const pendingLink = (): Link | null =>
+        newLinkUrl.trim() ? { name: newLinkName.trim() || siteName(newLinkUrl.trim()), url: newLinkUrl.trim() } : null;
+
     const handleAddLink = () => {
-        if (newLinkName && newLinkUrl) {
-            setLinks([...links, { name: newLinkName, url: newLinkUrl }]);
-            setNewLinkName('');
-            setNewLinkUrl('');
+        const link = pendingLink();
+        if (!link) return;
+        setLinks([...links, link]);
+        setNewLinkName('');
+        setNewLinkUrl('');
+    };
+
+    // Enter in a sub-field adds that item instead of submitting the whole task
+    const addOnEnter = (add: () => void) => (e: React.KeyboardEvent) => {
+        if (e.key === 'Enter' && !e.ctrlKey && !e.metaKey) {
+            e.preventDefault();
+            add();
         }
     };
 
     const removeLink = (index: number) => {
+        setDirty(true);
         setLinks(links.filter((_, i) => i !== index));
     };
 
     const toggleTool = (toolId: string) => {
+        setDirty(true);
         setSelectedToolIds(prev =>
             prev.includes(toolId)
                 ? prev.filter(id => id !== toolId)
@@ -124,6 +149,7 @@ export function AddTaskModal({ isOpen, onClose, onSuccess, tools, members, taskT
     };
 
     const removeInlineTool = (index: number) => {
+        setDirty(true);
         setInlineTools(prev => prev.filter((_, i) => i !== index));
     };
 
@@ -146,7 +172,12 @@ export function AddTaskModal({ isOpen, onClose, onSuccess, tools, members, taskT
         e.preventDefault();
         if (!user || !supabase || !activeWorkspace) return;
 
+        // a link typed but not yet added with + is saved too, instead of silently dropped
+        const extra = pendingLink();
+        const allLinks = extra ? [...links, extra] : links;
+
         setLoading(true);
+        setError(null);
         try {
             let taskId: string;
 
@@ -157,7 +188,7 @@ export function AddTaskModal({ isOpen, onClose, onSuccess, tools, members, taskT
                     .update({
                         name,
                         description: description || null,
-                        links,
+                        links: allLinks,
                         project_id: projectId,
                         assigned_to_member: assignedToMember,
                         due_date: dueDate || null,
@@ -183,7 +214,7 @@ export function AddTaskModal({ isOpen, onClose, onSuccess, tools, members, taskT
                     .insert({
                         name,
                         description: description || null,
-                        links,
+                        links: allLinks,
                         user_id: user.id,
                         status: 'to_do',
                         project_id: projectId,
@@ -236,145 +267,166 @@ export function AddTaskModal({ isOpen, onClose, onSuccess, tools, members, taskT
             onSuccess();
             resetForm();
             onClose();
-        } catch (error) {
-            console.error('Error saving task:', error);
+        } catch (err) {
+            console.error('Error saving task:', err);
+            setError('Could not save the task. Check your connection and try again.');
         } finally {
             setLoading(false);
         }
     };
 
     return (
-        <Modal isOpen={isOpen} onClose={onClose} title={isEditing ? 'Edit Task' : 'New Task'}>
-            <form onSubmit={handleSubmit} className="space-y-3">
-                {/* Task Name */}
+        <Modal
+            isOpen={isOpen}
+            onClose={onClose}
+            title={isEditing ? 'Edit Task' : 'New Task'}
+            size="lg"
+            confirmClose={dirty}
+            footer={
+                <ModalActions
+                    formId={FORM_ID}
+                    onCancel={onClose}
+                    submitLabel={isEditing ? 'Save Changes' : 'Create Task'}
+                    loading={loading}
+                    error={error}
+                />
+            }
+        >
+            <form id={FORM_ID} onSubmit={handleSubmit} onChange={() => setDirty(true)} className="space-y-4">
+                {/* What */}
                 <div>
-                    <label className="block text-sm font-medium text-text-muted dark:text-slate-400 mb-1">Task Name</label>
+                    <label htmlFor="task-name" className={labelClass}>Task name</label>
                     <input
+                        id="task-name"
                         type="text"
                         value={name}
                         onChange={(e) => setName(e.target.value)}
                         className="input-field"
                         placeholder="What needs to be done?"
                         required
+                        autoFocus
                     />
                 </div>
 
-                {/* Project Assignment */}
                 <div>
-                    <label className="block text-sm font-medium text-text-muted dark:text-slate-400 mb-1">Project Assignment</label>
-                    <select
-                        value={projectId || ''}
-                        onChange={(e) => setProjectId(e.target.value || null)}
-                        className="input-field"
-                    >
-                        <option value="">No Project (Workspace Default)</option>
-                        {projects.map(p => (
-                            <option key={p.id} value={p.id}>{p.name}</option>
-                        ))}
-                    </select>
-                </div>
-
-                {/* Member Assignment */}
-                <div>
-                    <label className="block text-sm font-medium text-text-muted dark:text-slate-400 mb-1">Assign To</label>
-                    <select
-                        value={assignedToMember || ''}
-                        onChange={(e) => setAssignedToMember(e.target.value || null)}
-                        className="input-field"
-                    >
-                        <option value="">Unassigned</option>
-                        {members.map(m => (
-                            <option key={m.id} value={m.id}>
-                                {m.member_title ? `${m.email} (${m.member_title})` : m.email}
-                            </option>
-                        ))}
-                    </select>
-                </div>
-
-                {/* Client Assignment */}
-                {clients && clients.length > 0 && (
-                    <div>
-                        <label className="block text-sm font-medium text-text-muted dark:text-slate-400 mb-1">Client</label>
-                        <select
-                            value={clientId || ''}
-                            onChange={(e) => setClientId(e.target.value || null)}
-                            className="input-field"
-                        >
-                            <option value="">No Client</option>
-                            {clients.filter(c => c.status === 'active' || c.status === 'negotiating').map(c => (
-                                <option key={c.id} value={c.id}>{c.name}</option>
-                            ))}
-                        </select>
-                    </div>
-                )}
-
-                {/* Description */}
-                <div>
-                    <label className="block text-sm font-medium text-text-muted dark:text-slate-400 mb-1">Description</label>
+                    <label htmlFor="task-description" className={labelClass}>Description</label>
                     <textarea
+                        id="task-description"
                         value={description}
                         onChange={(e) => setDescription(e.target.value)}
-                        className="input-field min-h-[80px] resize-none"
+                        className="input-field min-h-[80px] resize-y"
                         placeholder="Add some details..."
                     />
                 </div>
 
-                {/* Due Date */}
-                <div>
-                    <div className="flex items-center justify-between mb-1">
-                        <label className="block text-sm font-medium text-text-muted dark:text-slate-400">Due Date</label>
-                        {dueDate && (
-                            <button
-                                type="button"
-                                onClick={() => setDueDate('')}
-                                className="text-xs text-primary hover:text-primary-hover transition-colors"
-                            >
-                                Clear
-                            </button>
-                        )}
+                {/* Details: short fields side by side */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-4">
+                    <div>
+                        <label htmlFor="task-project" className={labelClass}>Project</label>
+                        <select
+                            id="task-project"
+                            value={projectId || ''}
+                            onChange={(e) => setProjectId(e.target.value || null)}
+                            className="input-field"
+                        >
+                            <option value="">No project</option>
+                            {projects.map(p => (
+                                <option key={p.id} value={p.id}>{p.name}</option>
+                            ))}
+                        </select>
                     </div>
-                    <input
-                        type="date"
-                        value={dueDate}
-                        onChange={(e) => setDueDate(e.target.value)}
-                        className="input-field"
-                    />
-                </div>
 
-                {/* Priority */}
-                <div>
-                    <label className="block text-sm font-medium text-text-muted dark:text-slate-400 mb-1">Priority</label>
-                    <div className="flex gap-2">
-                        {(['high', 'medium', 'low'] as const).map((level) => {
-                            const isSelected = priority === level;
-                            const colorMap = {
-                                high: isSelected
-                                    ? 'bg-red-100 text-red-600 border-red-300 dark:bg-red-900/30 dark:text-red-400'
-                                    : 'bg-white dark:bg-dark-surface text-text-muted dark:text-slate-400 border-slate-200 dark:border-dark-border hover:border-slate-300',
-                                medium: isSelected
-                                    ? 'bg-amber-100 text-amber-600 border-amber-300 dark:bg-amber-900/30 dark:text-amber-400'
-                                    : 'bg-white dark:bg-dark-surface text-text-muted dark:text-slate-400 border-slate-200 dark:border-dark-border hover:border-slate-300',
-                                low: isSelected
-                                    ? 'bg-blue-100 text-blue-600 border-blue-300 dark:bg-blue-900/30 dark:text-blue-400'
-                                    : 'bg-white dark:bg-dark-surface text-text-muted dark:text-slate-400 border-slate-200 dark:border-dark-border hover:border-slate-300',
-                            };
-                            return (
-                                <button
-                                    key={level}
-                                    type="button"
-                                    onClick={() => setPriority(isSelected ? null : level)}
-                                    className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-full border transition-colors ${colorMap[level]}`}
-                                >
-                                    {level.charAt(0).toUpperCase() + level.slice(1)}
-                                </button>
-                            );
-                        })}
+                    <div>
+                        <label htmlFor="task-assignee" className={labelClass}>Assign to</label>
+                        <select
+                            id="task-assignee"
+                            value={assignedToMember || ''}
+                            onChange={(e) => setAssignedToMember(e.target.value || null)}
+                            className="input-field"
+                        >
+                            <option value="">Unassigned</option>
+                            {members.map(m => (
+                                <option key={m.id} value={m.id}>
+                                    {m.member_title ? `${m.email} (${m.member_title})` : m.email}
+                                </option>
+                            ))}
+                        </select>
                     </div>
+
+                    <div>
+                        <div className="flex items-center justify-between mb-1">
+                            <label htmlFor="task-due" className="block text-sm font-medium text-text-muted dark:text-slate-400">Due date</label>
+                            {dueDate && (
+                                <button
+                                    type="button"
+                                    onClick={() => { setDueDate(''); setDirty(true); }}
+                                    className="text-xs text-primary hover:text-primary-hover transition-colors"
+                                >
+                                    Clear
+                                </button>
+                            )}
+                        </div>
+                        <input
+                            id="task-due"
+                            type="date"
+                            value={dueDate}
+                            onChange={(e) => setDueDate(e.target.value)}
+                            className="input-field"
+                        />
+                    </div>
+
+                    <div>
+                        <span id="task-priority-label" className={labelClass}>Priority</span>
+                        <div role="group" aria-labelledby="task-priority-label" className="flex gap-2">
+                            {(['high', 'medium', 'low'] as const).map((level) => {
+                                const isSelected = priority === level;
+                                const colorMap = {
+                                    high: isSelected
+                                        ? 'bg-red-100 text-red-600 border-red-300 dark:bg-red-900/30 dark:text-red-400'
+                                        : 'bg-white dark:bg-dark-surface text-text-muted dark:text-slate-400 border-slate-200 dark:border-dark-border hover:border-slate-300',
+                                    medium: isSelected
+                                        ? 'bg-amber-100 text-amber-600 border-amber-300 dark:bg-amber-900/30 dark:text-amber-400'
+                                        : 'bg-white dark:bg-dark-surface text-text-muted dark:text-slate-400 border-slate-200 dark:border-dark-border hover:border-slate-300',
+                                    low: isSelected
+                                        ? 'bg-blue-100 text-blue-600 border-blue-300 dark:bg-blue-900/30 dark:text-blue-400'
+                                        : 'bg-white dark:bg-dark-surface text-text-muted dark:text-slate-400 border-slate-200 dark:border-dark-border hover:border-slate-300',
+                                };
+                                return (
+                                    <button
+                                        key={level}
+                                        type="button"
+                                        aria-pressed={isSelected}
+                                        onClick={() => { setPriority(isSelected ? null : level); setDirty(true); }}
+                                        className={`flex-1 min-h-[42px] px-3 text-sm font-medium rounded-lg border transition-colors ${colorMap[level]}`}
+                                    >
+                                        {level.charAt(0).toUpperCase() + level.slice(1)}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
+
+                    {clients && clients.length > 0 && (
+                        <div>
+                            <label htmlFor="task-client" className={labelClass}>Client</label>
+                            <select
+                                id="task-client"
+                                value={clientId || ''}
+                                onChange={(e) => setClientId(e.target.value || null)}
+                                className="input-field"
+                            >
+                                <option value="">No client</option>
+                                {clients.filter(c => c.status === 'active' || c.status === 'negotiating').map(c => (
+                                    <option key={c.id} value={c.id}>{c.name}</option>
+                                ))}
+                            </select>
+                        </div>
+                    )}
                 </div>
 
                 {/* Attach Resources */}
                 <div>
-                    <label className="block text-sm font-medium text-text-muted dark:text-slate-400 mb-1">Attach Resources</label>
+                    <span className={labelClass}>Resources</span>
 
                     {/* Selected & inline tool chips */}
                     {(selectedTools.length > 0 || inlineTools.length > 0) && (
@@ -389,6 +441,7 @@ export function AddTaskModal({ isOpen, onClose, onSuccess, tools, members, taskT
                                     <button
                                         type="button"
                                         onClick={() => toggleTool(tool.id)}
+                                        aria-label={`Remove ${tool.name}`}
                                         className="ml-0.5 hover:text-red-500 transition-colors"
                                     >
                                         <X className="w-3 h-3" />
@@ -406,6 +459,7 @@ export function AddTaskModal({ isOpen, onClose, onSuccess, tools, members, taskT
                                     <button
                                         type="button"
                                         onClick={() => removeInlineTool(idx)}
+                                        aria-label={`Remove ${tool.name}`}
                                         className="ml-0.5 hover:text-red-500 transition-colors"
                                     >
                                         <X className="w-3 h-3" />
@@ -415,11 +469,21 @@ export function AddTaskModal({ isOpen, onClose, onSuccess, tools, members, taskT
                         </div>
                     )}
 
-                    {/* Dropdown */}
-                    <div className="relative" ref={dropdownRef}>
+                    {/* Dropdown (Escape closes just the list, not the whole form) */}
+                    <div
+                        className="relative"
+                        ref={dropdownRef}
+                        onKeyDown={(e) => {
+                            if (e.key === 'Escape' && showToolDropdown) {
+                                e.stopPropagation();
+                                setShowToolDropdown(false);
+                            }
+                        }}
+                    >
                         <button
                             type="button"
                             onClick={() => setShowToolDropdown(!showToolDropdown)}
+                            aria-expanded={showToolDropdown}
                             className="input-field flex items-center justify-between cursor-pointer"
                         >
                             <span className="text-text-muted text-sm">
@@ -442,8 +506,10 @@ export function AddTaskModal({ isOpen, onClose, onSuccess, tools, members, taskT
                                             type="text"
                                             value={toolSearch}
                                             onChange={(e) => setToolSearch(e.target.value)}
+                                            onKeyDown={addOnEnter(() => filteredTools[0] && toggleTool(filteredTools[0].id))}
                                             className="w-full pl-8 pr-3 py-1.5 text-sm rounded-md bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-text-main dark:text-slate-100 outline-none focus:border-primary focus:ring-1 focus:ring-primary/20 transition-all"
                                             placeholder="Search resources..."
+                                            aria-label="Search resources"
                                             autoFocus
                                         />
                                     </div>
@@ -463,6 +529,7 @@ export function AddTaskModal({ isOpen, onClose, onSuccess, tools, members, taskT
                                                 type="button"
                                                 key={tool.id}
                                                 onClick={() => toggleTool(tool.id)}
+                                                aria-pressed={isSelected}
                                                 className={`w-full flex items-center gap-2.5 px-3 py-2 text-sm text-left transition-colors ${
                                                     isSelected
                                                         ? 'bg-primary/10 text-primary'
@@ -510,16 +577,20 @@ export function AddTaskModal({ isOpen, onClose, onSuccess, tools, members, taskT
                                 type="text"
                                 value={inlineToolName}
                                 onChange={(e) => setInlineToolName(e.target.value)}
+                                onKeyDown={addOnEnter(handleAddInlineTool)}
                                 className="w-full px-3 py-1.5 text-sm rounded-md bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-text-main dark:text-slate-100 outline-none focus:border-primary transition-all"
                                 placeholder="Resource name"
+                                aria-label="New resource name"
                                 autoFocus
                             />
                             <input
                                 type="url"
                                 value={inlineToolLink}
                                 onChange={(e) => setInlineToolLink(e.target.value)}
+                                onKeyDown={addOnEnter(handleAddInlineTool)}
                                 className="w-full px-3 py-1.5 text-sm rounded-md bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-text-main dark:text-slate-100 outline-none focus:border-primary transition-all"
                                 placeholder="https://..."
+                                aria-label="New resource URL"
                             />
                             <div className="flex justify-end gap-2 pt-1">
                                 <button
@@ -548,7 +619,7 @@ export function AddTaskModal({ isOpen, onClose, onSuccess, tools, members, taskT
 
                 {/* Links */}
                 <div>
-                    <label className="block text-sm font-medium text-text-muted dark:text-slate-400 mb-1">Links</label>
+                    <span className={labelClass}>Links</span>
 
                     {links.length > 0 && (
                         <div className="space-y-1.5 mb-2">
@@ -561,6 +632,7 @@ export function AddTaskModal({ isOpen, onClose, onSuccess, tools, members, taskT
                                     <button
                                         type="button"
                                         onClick={() => removeLink(idx)}
+                                        aria-label={`Remove link ${link.name}`}
                                         className="text-slate-400 hover:text-red-500 transition-colors flex-shrink-0"
                                     >
                                         <X className="w-4 h-4" />
@@ -572,47 +644,33 @@ export function AddTaskModal({ isOpen, onClose, onSuccess, tools, members, taskT
 
                     <div className="flex gap-2">
                         <input
-                            type="text"
-                            value={newLinkName}
-                            onChange={(e) => setNewLinkName(e.target.value)}
-                            className="input-field flex-1"
-                            placeholder="Link Name"
-                        />
-                        <input
                             type="url"
                             value={newLinkUrl}
                             onChange={(e) => setNewLinkUrl(e.target.value)}
+                            onKeyDown={addOnEnter(handleAddLink)}
                             className="input-field flex-[2]"
                             placeholder="https://..."
+                            aria-label="Link URL"
+                        />
+                        <input
+                            type="text"
+                            value={newLinkName}
+                            onChange={(e) => setNewLinkName(e.target.value)}
+                            onKeyDown={addOnEnter(handleAddLink)}
+                            className="input-field flex-1"
+                            placeholder="Name (optional)"
+                            aria-label="Link name"
                         />
                         <button
                             type="button"
                             onClick={handleAddLink}
-                            disabled={!newLinkName || !newLinkUrl}
+                            disabled={!newLinkUrl.trim()}
+                            aria-label="Add link"
                             className="p-2 bg-slate-100 dark:bg-slate-800 text-text-muted rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-50 transition-colors flex-shrink-0"
                         >
                             <Plus className="w-5 h-5" />
                         </button>
                     </div>
-                </div>
-
-                {/* Actions */}
-                <div className="pt-3 flex justify-end gap-3 border-t border-slate-100 dark:border-dark-border">
-                    <button
-                        type="button"
-                        onClick={onClose}
-                        className="px-4 py-2 text-text-muted hover:text-text-main dark:text-slate-400 dark:hover:text-slate-100 font-medium transition-colors"
-                    >
-                        Cancel
-                    </button>
-                    <button
-                        type="submit"
-                        disabled={loading}
-                        className="btn-primary flex items-center gap-2"
-                    >
-                        {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-                        {isEditing ? 'Save Changes' : 'Create Task'}
-                    </button>
                 </div>
             </form>
         </Modal>

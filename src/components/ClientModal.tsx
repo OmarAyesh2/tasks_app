@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Modal } from './Modal';
+import { Modal, ModalActions } from './Modal';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import { useWorkspace } from '../context/WorkspaceContext';
-import { Loader2, Instagram, Facebook, Globe, MapPin } from 'lucide-react';
-import type { Client, ClientStatus } from '../types';
+import { ChevronRight, Instagram, Facebook, Globe, MapPin } from 'lucide-react';
+import type { Client, ClientSocialLinks, ClientStatus } from '../types';
 
 function SnapchatIcon({ className }: { className?: string }) {
     return (
@@ -38,16 +38,31 @@ interface ClientModalProps {
     clientToEdit?: Client | null;
 }
 
-const STATUS_OPTIONS: { value: ClientStatus; label: string }[] = [
-    { value: 'potential', label: 'Potential' },
-    { value: 'negotiating', label: 'Negotiating' },
-    { value: 'active', label: 'Active' },
+const FORM_ID = 'client-form';
+const labelClass = 'block text-sm font-medium text-text-muted dark:text-slate-400 mb-1';
+
+const STATUS_OPTIONS: { value: ClientStatus; label: string; selected: string }[] = [
+    { value: 'potential', label: 'Potential', selected: 'bg-slate-100 text-slate-700 border-slate-300 dark:bg-slate-700 dark:text-slate-100 dark:border-slate-500' },
+    { value: 'negotiating', label: 'Negotiating', selected: 'bg-amber-100 text-amber-700 border-amber-300 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-700' },
+    { value: 'active', label: 'Active', selected: 'bg-green-100 text-green-700 border-green-300 dark:bg-green-900/30 dark:text-green-400 dark:border-green-700' },
+];
+
+type SocialKey = keyof ClientSocialLinks;
+const SOCIALS: { key: SocialKey; label: string; Icon: React.ComponentType<{ className?: string }>; color: string; placeholder: string }[] = [
+    { key: 'instagram', label: 'Instagram', Icon: Instagram, color: 'text-pink-500', placeholder: 'https://instagram.com/...' },
+    { key: 'facebook', label: 'Facebook', Icon: Facebook, color: 'text-blue-600', placeholder: 'https://facebook.com/...' },
+    { key: 'tiktok', label: 'TikTok', Icon: TikTokIcon, color: 'text-slate-900 dark:text-slate-100', placeholder: 'https://tiktok.com/@...' },
+    { key: 'linkedin', label: 'LinkedIn', Icon: LinkedInIcon, color: 'text-blue-500', placeholder: 'https://linkedin.com/company/...' },
+    { key: 'maps', label: 'Google Maps', Icon: MapPin, color: 'text-red-500', placeholder: 'https://maps.google.com/...' },
+    { key: 'snapchat', label: 'Snapchat', Icon: SnapchatIcon, color: 'text-yellow-400', placeholder: 'https://snapchat.com/add/...' },
 ];
 
 export function ClientModal({ isOpen, onClose, onSuccess, clientToEdit }: ClientModalProps) {
     const { user } = useAuth();
     const { activeWorkspace } = useWorkspace();
     const [loading, setLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [dirty, setDirty] = useState(false);
 
     // Form state
     const [name, setName] = useState('');
@@ -56,46 +71,21 @@ export function ClientModal({ isOpen, onClose, onSuccess, clientToEdit }: Client
     const [email, setEmail] = useState('');
     const [website, setWebsite] = useState('');
     const [notes, setNotes] = useState('');
-    const [instagram, setInstagram] = useState('');
-    const [facebook, setFacebook] = useState('');
-    const [tiktok, setTiktok] = useState('');
-    const [linkedin, setLinkedin] = useState('');
-    const [maps, setMaps] = useState('');
-    const [snapchat, setSnapchat] = useState('');
+    const [socials, setSocials] = useState<ClientSocialLinks>({});
 
-    const resetForm = () => {
-        setName('');
-        setStatus('potential');
-        setPhone('');
-        setEmail('');
-        setWebsite('');
-        setNotes('');
-        setInstagram('');
-        setFacebook('');
-        setTiktok('');
-        setLinkedin('');
-        setMaps('');
-        setSnapchat('');
-    };
+    const filledSocials = SOCIALS.filter(s => socials[s.key]?.trim()).length;
 
     useEffect(() => {
         if (isOpen) {
-            if (clientToEdit) {
-                setName(clientToEdit.name);
-                setStatus(clientToEdit.status);
-                setPhone(clientToEdit.phone || '');
-                setEmail(clientToEdit.email || '');
-                setWebsite(clientToEdit.website || '');
-                setNotes(clientToEdit.notes || '');
-                setInstagram(clientToEdit.social_links?.instagram || '');
-                setFacebook(clientToEdit.social_links?.facebook || '');
-                setTiktok(clientToEdit.social_links?.tiktok || '');
-                setLinkedin(clientToEdit.social_links?.linkedin || '');
-                setMaps(clientToEdit.social_links?.maps || '');
-                setSnapchat(clientToEdit.social_links?.snapchat || '');
-            } else {
-                resetForm();
-            }
+            setError(null);
+            setDirty(false);
+            setName(clientToEdit?.name ?? '');
+            setStatus(clientToEdit?.status ?? 'potential');
+            setPhone(clientToEdit?.phone ?? '');
+            setEmail(clientToEdit?.email ?? '');
+            setWebsite(clientToEdit?.website ?? '');
+            setNotes(clientToEdit?.notes ?? '');
+            setSocials(clientToEdit?.social_links ?? {});
         }
     }, [isOpen, clientToEdit]);
 
@@ -104,15 +94,12 @@ export function ClientModal({ isOpen, onClose, onSuccess, clientToEdit }: Client
         if (!user || !supabase || !activeWorkspace) return;
 
         setLoading(true);
+        setError(null);
 
-        const socialLinks = {
-            ...(instagram && { instagram }),
-            ...(facebook && { facebook }),
-            ...(tiktok && { tiktok }),
-            ...(linkedin && { linkedin }),
-            ...(maps && { maps }),
-            ...(snapchat && { snapchat }),
-        };
+        // only keep the links that were filled in
+        const socialLinks = Object.fromEntries(
+            Object.entries(socials).filter(([, v]) => typeof v === 'string' && v.trim()).map(([k, v]) => [k, (v as string).trim()])
+        );
 
         const payload = {
             name,
@@ -121,7 +108,7 @@ export function ClientModal({ isOpen, onClose, onSuccess, clientToEdit }: Client
             email: email || null,
             website: website || null,
             notes: notes || null,
-            social_links: Object.keys(socialLinks).length > 0 ? socialLinks : {},
+            social_links: socialLinks,
         };
 
         try {
@@ -145,69 +132,84 @@ export function ClientModal({ isOpen, onClose, onSuccess, clientToEdit }: Client
             }
 
             onSuccess();
-            resetForm();
             onClose();
-        } catch (error) {
-            console.error('Error saving client:', error);
+        } catch (err) {
+            console.error('Error saving client:', err);
+            setError('Could not save the client. Check your connection and try again.');
         } finally {
             setLoading(false);
         }
     };
 
     return (
-        <Modal isOpen={isOpen} onClose={onClose} title={clientToEdit ? 'Edit Client' : 'New Client'}>
-            <form onSubmit={handleSubmit} className="space-y-4">
-                {/* Name */}
+        <Modal
+            isOpen={isOpen}
+            onClose={onClose}
+            title={clientToEdit ? 'Edit Client' : 'New Client'}
+            confirmClose={dirty}
+            footer={
+                <ModalActions
+                    formId={FORM_ID}
+                    onCancel={onClose}
+                    submitLabel={clientToEdit ? 'Save Changes' : 'Add Client'}
+                    loading={loading}
+                    error={error}
+                />
+            }
+        >
+            <form id={FORM_ID} onSubmit={handleSubmit} onChange={() => setDirty(true)} className="space-y-4">
                 <div>
-                    <label className="block text-sm font-medium text-text-muted mb-1">Client Name</label>
+                    <label htmlFor="client-name" className={labelClass}>Client name</label>
                     <input
+                        id="client-name"
                         type="text"
                         value={name}
                         onChange={(e) => setName(e.target.value)}
                         className="input-field"
                         placeholder="Company or contact name"
                         required
+                        autoFocus
                     />
                 </div>
 
-                {/* Status */}
                 <div>
-                    <label className="block text-sm font-medium text-text-muted mb-1">Status</label>
-                    <div className="relative">
-                        <select
-                            value={status}
-                            onChange={(e) => setStatus(e.target.value as ClientStatus)}
-                            className="input-field appearance-none cursor-pointer pr-10"
-                        >
-                            {STATUS_OPTIONS.map((opt) => (
-                                <option key={opt.value} value={opt.value}>
+                    <span id="client-status-label" className={labelClass}>Status</span>
+                    <div role="group" aria-labelledby="client-status-label" className="flex gap-2">
+                        {STATUS_OPTIONS.map((opt) => {
+                            const isSelected = status === opt.value;
+                            return (
+                                <button
+                                    key={opt.value}
+                                    type="button"
+                                    aria-pressed={isSelected}
+                                    onClick={() => { setStatus(opt.value); setDirty(true); }}
+                                    className={`flex-1 min-h-[42px] px-3 text-sm font-medium rounded-lg border transition-colors ${isSelected
+                                        ? opt.selected
+                                        : 'bg-white dark:bg-dark-surface text-text-muted dark:text-slate-400 border-slate-200 dark:border-dark-border hover:border-slate-300'}`}
+                                >
                                     {opt.label}
-                                </option>
-                            ))}
-                        </select>
-                        <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-text-muted">
-                            <svg className="w-4 h-4 fill-current" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
-                                <path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z" />
-                            </svg>
-                        </div>
+                                </button>
+                            );
+                        })}
                     </div>
                 </div>
 
-                {/* Phone + Email side by side */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
-                        <label className="block text-sm font-medium text-text-muted mb-1">Phone</label>
+                        <label htmlFor="client-phone" className={labelClass}>Phone</label>
                         <input
+                            id="client-phone"
                             type="tel"
                             value={phone}
                             onChange={(e) => setPhone(e.target.value)}
                             className="input-field"
-                            placeholder="+1 (555) 000-0000"
+                            placeholder="+962 7 0000 0000"
                         />
                     </div>
                     <div>
-                        <label className="block text-sm font-medium text-text-muted mb-1">Email</label>
+                        <label htmlFor="client-email" className={labelClass}>Email</label>
                         <input
+                            id="client-email"
                             type="email"
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
@@ -217,14 +219,14 @@ export function ClientModal({ isOpen, onClose, onSuccess, clientToEdit }: Client
                     </div>
                 </div>
 
-                {/* Website */}
                 <div>
-                    <label className="block text-sm font-medium text-text-muted mb-1">Website</label>
+                    <label htmlFor="client-website" className={labelClass}>Website</label>
                     <div className="relative">
                         <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-text-muted">
                             <Globe className="w-4 h-4" />
                         </div>
                         <input
+                            id="client-website"
                             type="url"
                             value={website}
                             onChange={(e) => setWebsite(e.target.value)}
@@ -234,119 +236,44 @@ export function ClientModal({ isOpen, onClose, onSuccess, clientToEdit }: Client
                     </div>
                 </div>
 
-                {/* Social Links Section */}
-                <div className="pt-2">
-                    <label className="block text-sm font-medium text-text-muted mb-3">Social Media Links</label>
-                    <div className="space-y-3">
-                        <div className="relative">
-                            <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-pink-500">
-                                <Instagram className="w-4 h-4" />
-                            </div>
-                            <input
-                                type="text"
-                                value={instagram}
-                                onChange={(e) => setInstagram(e.target.value)}
-                                className="input-field pl-9"
-                                placeholder="https://instagram.com/..."
-                            />
-                        </div>
-
-                        <div className="relative">
-                            <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-blue-600">
-                                <Facebook className="w-4 h-4" />
-                            </div>
-                            <input
-                                type="text"
-                                value={facebook}
-                                onChange={(e) => setFacebook(e.target.value)}
-                                className="input-field pl-9"
-                                placeholder="https://facebook.com/..."
-                            />
-                        </div>
-
-                        <div className="relative">
-                            <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-slate-100">
-                                <TikTokIcon className="w-4 h-4" />
-                            </div>
-                            <input
-                                type="text"
-                                value={tiktok}
-                                onChange={(e) => setTiktok(e.target.value)}
-                                className="input-field pl-9"
-                                placeholder="https://tiktok.com/@..."
-                            />
-                        </div>
-
-                        <div className="relative">
-                            <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-blue-500">
-                                <LinkedInIcon className="w-4 h-4" />
-                            </div>
-                            <input
-                                type="text"
-                                value={linkedin}
-                                onChange={(e) => setLinkedin(e.target.value)}
-                                className="input-field pl-9"
-                                placeholder="https://linkedin.com/company/..."
-                            />
-                        </div>
-
-                        <div className="relative">
-                            <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-red-500">
-                                <MapPin className="w-4 h-4" />
-                            </div>
-                            <input
-                                type="text"
-                                value={maps}
-                                onChange={(e) => setMaps(e.target.value)}
-                                className="input-field pl-9"
-                                placeholder="https://maps.google.com/..."
-                            />
-                        </div>
-
-                        <div className="relative">
-                            <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-yellow-400">
-                                <SnapchatIcon className="w-4 h-4" />
-                            </div>
-                            <input
-                                type="text"
-                                value={snapchat}
-                                onChange={(e) => setSnapchat(e.target.value)}
-                                className="input-field pl-9"
-                                placeholder="https://snapchat.com/add/..."
-                            />
-                        </div>
-                    </div>
-                </div>
-
-                {/* Notes */}
-                <div className="pt-2">
-                    <label className="block text-sm font-medium text-text-muted mb-1">Client Notes</label>
+                <div>
+                    <label htmlFor="client-notes" className={labelClass}>Notes</label>
                     <textarea
+                        id="client-notes"
                         value={notes}
                         onChange={(e) => setNotes(e.target.value)}
-                        className="input-field min-h-[100px] resize-y"
-                        placeholder="Add important details, context, or meeting notes here..."
+                        className="input-field min-h-[90px] resize-y"
+                        placeholder="Important details, context, or meeting notes..."
                     />
                 </div>
 
-                {/* Actions */}
-                <div className="pt-4 flex justify-end gap-3">
-                    <button
-                        type="button"
-                        onClick={onClose}
-                        className="px-4 py-2 text-text-muted hover:text-text-main dark:text-slate-400 dark:hover:text-slate-100 font-medium transition-colors"
-                    >
-                        Cancel
-                    </button>
-                    <button
-                        type="submit"
-                        disabled={loading}
-                        className="btn-primary flex items-center gap-2"
-                    >
-                        {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-                        {clientToEdit ? 'Save Changes' : 'Add Client'}
-                    </button>
-                </div>
+                {/* Social links: folded away so the core fields stay short; open when editing a client that has some */}
+                <details open={filledSocials > 0 && !!clientToEdit} className="group rounded-lg border border-slate-200 dark:border-dark-border">
+                    <summary className="flex items-center gap-2 px-3 py-2.5 cursor-pointer select-none text-sm font-medium text-text-main dark:text-slate-200 list-none [&::-webkit-details-marker]:hidden">
+                        <ChevronRight className="w-4 h-4 text-text-muted transition-transform group-open:rotate-90" />
+                        Social links
+                        <span className="text-xs font-normal text-text-muted">
+                            {filledSocials > 0 ? `${filledSocials} added` : 'optional'}
+                        </span>
+                    </summary>
+                    <div className="px-3 pb-3 pt-1 space-y-3">
+                        {SOCIALS.map(({ key, label, Icon, color, placeholder }) => (
+                            <div key={key} className="relative">
+                                <div className={`absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none ${color}`}>
+                                    <Icon className="w-4 h-4" />
+                                </div>
+                                <input
+                                    type="text"
+                                    value={socials[key] ?? ''}
+                                    onChange={(e) => setSocials(s => ({ ...s, [key]: e.target.value }))}
+                                    className="input-field pl-9"
+                                    placeholder={placeholder}
+                                    aria-label={label}
+                                />
+                            </div>
+                        ))}
+                    </div>
+                </details>
             </form>
         </Modal>
     );
