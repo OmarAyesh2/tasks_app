@@ -657,9 +657,9 @@ function Dashboard() {
               <FileBrowser key={activeWorkspace?.id} />
             ) : currentView === 'calendar' ? (
               <div>
-                {memberFilter}
                 {activeWorkspace && <CalendarView
                   workspaceId={activeWorkspace.id}
+                  toolbarEnd={memberFilter ? <div className="[&>div]:mb-0">{memberFilter}</div> : undefined}
                   tasks={tasks.filter(matchesFilters)}
                   canEdit={currentMemberProfile?.permission_role !== 'viewer'}
                   currentUserId={user.id}
