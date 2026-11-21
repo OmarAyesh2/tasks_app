@@ -111,7 +111,7 @@ function BoardCard({ task, members, today, draggable, onOpen }: { task: Task; me
             {...attributes}
             {...listeners}
             onClick={() => onOpen(task)}
-            title={draggable ? undefined : 'Only the task’s creator or an admin can move it'}
+            title={draggable ? undefined : 'Only the creator, the assignee or an admin can move it'}
             className={`block w-full text-left touch-manipulation ${isDragging ? 'opacity-30' : ''} ${draggable ? 'cursor-grab active:cursor-grabbing' : ''}`}
         >
             <CardBody task={task} members={members} today={today} />

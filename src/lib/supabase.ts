@@ -16,6 +16,17 @@ export function canDeleteFile(uploadedBy: string | null | undefined, role: strin
     return role === 'owner' || role === 'admin' || (role === 'member' && !!userId && uploadedBy === userId);
 }
 
+// Mirrors the tasks update rule (policy + limit_assignee_task_edits trigger):
+// full = owners/admins and the creator edit everything; work = the assignee may also change status and checklist.
+export function taskAccess(
+    task: { created_by?: string | null; assigned_to_member?: string | null },
+    role: string | undefined, memberId: string | undefined, userId: string | undefined,
+) {
+    const full = role === 'owner' || role === 'admin' || (role === 'member' && !!userId && task.created_by === userId);
+    const work = full || (role === 'member' && !!memberId && task.assigned_to_member === memberId);
+    return { full, work };
+}
+
 export const driveFileId = (publicUrl: string) => publicUrl.match(/\/file\/d\/([^/]+)/)?.[1];
 
 // Deletes an attachment's Google Drive file; the function also removes its task_assets row.

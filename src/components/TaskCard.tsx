@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import type { Task, TaskComment, TaskAsset } from '../types';
 import { ConfirmModal } from './ConfirmModal';
 import { Check, Link as LinkIcon, ExternalLink, Trash2, Library, Pencil, Loader2, Sparkles, Plus, X, Paperclip, File as FileIcon, FolderOpen, GripVertical, MessageSquare, Send, ContactRound, ChevronDown, CalendarDays } from 'lucide-react';
-import { supabase, canDeleteFile, driveFileId } from '../lib/supabase';
+import { supabase, canDeleteFile, driveFileId, taskAccess } from '../lib/supabase';
 import { FileViewer, type ViewerFile } from './FileViewer';
 import { FileBrowser, type DriveItem } from './FileBrowser';
 import { Modal } from './Modal';
@@ -316,6 +316,7 @@ Strictly return a JSON array of sub-task objects formatted exactly like this: [{
     };
 
     const isDone = task.status === 'done';
+    const access = taskAccess(task, currentMemberProfile?.permission_role, currentMemberProfile?.id, user?.id);
 
     return (
         <article ref={cardRef} className={cn('card-base group relative p-4 sm:p-5 animate-fade-in transition-shadow duration-500', isDragging ? 'opacity-50 shadow-lg' : '', focused ? 'ring-2 ring-primary shadow-glow' : '')}>
@@ -324,13 +325,16 @@ Strictly return a JSON array of sub-task objects formatted exactly like this: [{
                 <button
                     type="button"
                     onClick={() => onStatusChange(task)}
+                    disabled={!access.work}
+                    title={access.work ? undefined : 'Only the creator, the assignee or an admin can change this'}
                     aria-label={isDone ? `Mark "${task.name}" as not done` : `Mark "${task.name}" as done`}
                     aria-pressed={isDone}
                     className={cn(
                         "mt-0.5 w-7 h-7 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all duration-200 active:scale-90",
                         isDone
                             ? "bg-green-500 border-green-500 text-white"
-                            : "border-slate-300 dark:border-white/20 hover:border-primary text-transparent hover:text-primary/40"
+                            : "border-slate-300 dark:border-white/20 hover:border-primary text-transparent hover:text-primary/40",
+                        !access.work ? "opacity-50 pointer-events-none" : ""
                     )}
                 >
                     <Check className="w-4 h-4" strokeWidth={3} />
@@ -362,6 +366,7 @@ Strictly return a JSON array of sub-task objects formatted exactly like this: [{
                             <GripVertical className="w-4 h-4" />
                         </span>
                     )}
+                    {access.full && (<>
                     <button
                         type="button"
                         onClick={(e) => { e.stopPropagation(); onEdit(); }}
@@ -380,6 +385,7 @@ Strictly return a JSON array of sub-task objects formatted exactly like this: [{
                     >
                         <Trash2 className="w-4 h-4" />
                     </button>
+                    </>)}
                 </div>
             </div>
 

@@ -15,7 +15,7 @@ import { ConfirmModal } from './components/ConfirmModal';
 import { MemberManagement } from './components/MemberManagement';
 import { WorkTime } from './components/WorkTime';
 import { Plus, Loader2, Menu, List, Columns3 } from 'lucide-react';
-import { supabase, deleteDriveAttachments, canDeleteFile } from './lib/supabase';
+import { supabase, deleteDriveAttachments, canDeleteFile, taskAccess } from './lib/supabase';
 import { FileBrowser } from './components/FileBrowser';
 import { NotificationBell } from './components/NotificationBell';
 import { CalendarView } from './components/CalendarView';
@@ -681,10 +681,7 @@ function Dashboard() {
                   <KanbanBoard
                     tasks={tasks.filter(matchesFilters)}
                     members={members}
-                    canMove={(t) => {
-                      const role = currentMemberProfile?.permission_role;
-                      return role === 'owner' || role === 'admin' || (role === 'member' && t.created_by === user.id);
-                    }}
+                    canMove={(t) => taskAccess(t, currentMemberProfile?.permission_role, currentMemberProfile?.id, user.id).work}
                     onMove={(taskId, status) => handleTaskUpdate(taskId, { status })}
                     onOpen={(task) => activeWorkspace && handleOpenTask(activeWorkspace.id, task.id)}
                     onShowCompleted={() => setCurrentView('completed')}
